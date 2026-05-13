@@ -14,19 +14,18 @@ export default function Topology() {
             const demoVillages: Village[] = Array.from({ length: 8 }, (_, i) => {
                 const angle = (i / 8) * Math.PI * 2;
                 const radius = i < 3 ? 100 : 200;
+                const statuses = ['SURPLUS', 'BALANCED', 'WARNING', 'DEFICIT'] as const;
                 return {
                     id: `village-${i}`,
                     name: `Village-${String.fromCharCode(65 + i)}`,
-                    soc: Math.random() * 100,
-                    solarGeneration: Math.random() * 300,
-                    demand: Math.random() * 250,
-                    status: ['SURPLUS', 'BALANCED', 'WARNING', 'DEFICIT'][
-                        Math.floor(Math.random() * 4)
-                    ] as any,
-                    temperature: 20 + Math.random() * 15,
-                    frequency: 49.8 + Math.random() * 0.4,
-                    criticalLoad: Math.random() * 100,
-                    standardLoad: Math.random() * 200,
+                    soc: 50 + (i * 10),
+                    solarGeneration: 150 + (i * 20),
+                    demand: 100 + (i * 15),
+                    status: statuses[i % 4],
+                    temperature: 25 + i,
+                    frequency: 50 + (i * 0.05),
+                    criticalLoad: 40 + (i * 8),
+                    standardLoad: 80 + (i * 15),
                     x: 400 + radius * Math.cos(angle),
                     y: 300 + radius * Math.sin(angle),
                 };

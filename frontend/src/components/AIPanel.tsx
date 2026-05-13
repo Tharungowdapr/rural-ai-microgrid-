@@ -1,11 +1,14 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useGridStore } from '@/hooks/useGridStore';
 import { LineChart, Line, XAxis, YAxis, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { Brain, AlertTriangle, TrendingDown } from 'lucide-react';
 
 export default function AIPanel() {
     const { forecasts } = useGridStore();
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => setMounted(true), []);
 
     // Generate sample forecast data if empty
     const data = forecasts.length > 0
@@ -16,8 +19,8 @@ export default function AIPanel() {
         }))
         : Array.from({ length: 12 }, (_, i) => ({
             time: i,
-            demand: 150 + Math.random() * 100,
-            generation: 180 + Math.random() * 120,
+            demand: 150 + (i * 15),
+            generation: 180 + (i * 10),
         }));
 
     return (
@@ -106,7 +109,7 @@ export default function AIPanel() {
             {/* Model Info */}
             <div className="text-xs text-gray-500 border-t border-cyan border-opacity-20 pt-2">
                 <p>Model: LSTM (6-hour window)</p>
-                <p>Last Updated: {new Date().toLocaleTimeString()}</p>
+                <p>Last Updated: {mounted ? new Date().toLocaleTimeString() : '--:--:--'}</p>
             </div>
         </div>
     );
