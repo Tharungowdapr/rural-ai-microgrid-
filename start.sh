@@ -24,7 +24,7 @@ sleep 2
 # Start frontend
 echo "Starting frontend on http://localhost:3000..."
 cd frontend
-npm run dev &
+node node_modules/next/dist/bin/next dev &
 FRONTEND_PID=$!
 cd ..
 

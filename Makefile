@@ -63,16 +63,16 @@ backend:
 
 # Run frontend development server
 frontend-dev:
-	@sleep 2 && cd frontend && npm run dev
+	@sleep 2 && cd frontend && node node_modules/next/dist/bin/next dev
 
 # Run frontend production build
 frontend:
-	@cd frontend && npm run build && npm start
+	@cd frontend && node node_modules/next/dist/bin/next build && node node_modules/next/dist/bin/next start
 
 # Build frontend for production
 build:
 	@echo "🏗️  Building frontend for production..."
-	@cd frontend && npm run build
+	@cd frontend && node node_modules/next/dist/bin/next build
 	@echo "✅ Build complete! Output in ./frontend/.next"
 
 # Clean build artifacts and caches
@@ -94,7 +94,7 @@ kill-all:
 	@echo "🛑 Stopping all processes..."
 	@pkill -f "uvicorn" || true
 	@pkill -f "next dev" || true
-	@pkill -f "npm run dev" || true
+	@pkill -f "next dev" || true
 	@echo "✅ All processes stopped"
 
 # Docker targets

@@ -34,7 +34,7 @@ services:
       - "8000:8000"
     environment:
       - PYTHONUNBUFFERED=1
-      - MODEL_PATH=/app/ml/lstm_model.h5
+      - MODEL_PATH=lstm_model.h5
     volumes:
       - ./backend:/app
       - ./ml:/app/ml

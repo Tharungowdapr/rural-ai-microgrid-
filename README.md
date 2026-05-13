@@ -76,7 +76,7 @@ rural-ai-microgrid/
 
 ## AI/ML System
 
-Pre-trained LSTM model (`ml/lstm_model.h5`) predicts future energy demand, solar generation trends, battery depletion risk, and optimal transfer windows.
+Pre-trained LSTM model (`lstm_model.h5`) predicts future energy demand, solar generation trends, battery depletion risk, and optimal transfer windows.
 
 **Model:** LSTM(64) → Dropout(0.2) → LSTM(32) → Dense(16) → Dense(1)
 

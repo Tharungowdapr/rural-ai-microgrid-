@@ -40,7 +40,8 @@ echo -e "${GREEN}Backend ready${NC}"
 echo ""
 echo -e "${BLUE}Setting up Frontend...${NC}"
 cd ../frontend
-npm install -q
+rm -rf node_modules package-lock.json 2>/dev/null
+npm install --no-package-lock 2>&1 | tail -3
 echo -e "${GREEN}Frontend ready${NC}"
 
 # Directories

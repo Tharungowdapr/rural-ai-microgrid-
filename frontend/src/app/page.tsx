@@ -20,9 +20,9 @@ export default function Dashboard() {
     const { send } = useWebSocket();
     const { simulationRunning, setSimulationRunning } = useGridStore();
     const [showSettings, setShowSettings] = useState(false);
-    // Start simulation when component mounts
-    setSimulationRunning(true);
-}, [setSimulationRunning]);
+    useEffect(() => {
+        setSimulationRunning(true);
+    }, [setSimulationRunning]);
 
 return (
     <div className="w-screen h-screen bg-deep-blue overflow-hidden flex flex-col">
@@ -88,10 +88,9 @@ return (
                 <BatteryMonitor />
             </div>
         </div>
-    </div>
 
-            {/* Alert Stack - Floating */ }
-<AlertStack />
-        </div >
+        {/* Alert Stack - Floating */}
+        <AlertStack />
+    </div>
     );
 }

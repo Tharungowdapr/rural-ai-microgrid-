@@ -2,17 +2,21 @@ import numpy as np
 import os
 from typing import List, Dict
 from app.simulation.engine import Village, Weather
-import tensorflow as tf
+try:
+    import tensorflow as tf
+    _HAS_TF = True
+except ImportError:
+    _HAS_TF = False
 
 class Forecaster:
     """AI Forecasting module using LSTM model for energy predictions"""
     
     def __init__(self, model_path: str = None):
         self.model = None
-        self.model_path = model_path or "/Users/tharungowdapr/Documents/college/projects/mlflow/rural-ai-microgrid/ml/lstm_model.h5"
+        self.model_path = model_path or "lstm_model.h5"
         
         try:
-            if os.path.exists(self.model_path):
+            if _HAS_TF and os.path.exists(self.model_path):
                 self.model = tf.keras.models.load_model(self.model_path)
                 print(f"Loaded LSTM model from {self.model_path}")
             else:

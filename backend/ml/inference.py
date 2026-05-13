@@ -1,4 +1,8 @@
-import tensorflow as tf
+try:
+    import tensorflow as tf
+    _HAS_TF = True
+except ImportError:
+    _HAS_TF = False
 import numpy as np
 from sklearn.preprocessing import MinMaxScaler
 import os
@@ -9,13 +13,13 @@ class LSTMInference:
     def __init__(self, model_path: str = None):
         self.model = None
         self.scaler = None
-        self.model_path = model_path or "/Users/tharungowdapr/Documents/college/projects/mlflow/rural-ai-microgrid/ml/lstm_model.h5"
+        self.model_path = model_path or "lstm_model.h5"
         
         self._load_model()
     
     def _load_model(self):
         """Load the saved LSTM model"""
-        if os.path.exists(self.model_path):
+        if _HAS_TF and os.path.exists(self.model_path):
             try:
                 self.model = tf.keras.models.load_model(self.model_path)
                 print(f"✓ Loaded model: {self.model_path}")
