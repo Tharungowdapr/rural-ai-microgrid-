@@ -1,18 +1,23 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { useGridStore } from './useGridStore';
+import { useGridStore, Village } from './useGridStore';
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000/ws';
+const RECONNECT_DELAY = 3000;
 
 export const useWebSocket = () => {
     const wsRef = useRef<WebSocket | null>(null);
+    const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const {
         updateVillage,
+        setTransfers,
         addTransfer,
         removeTransfer,
         addAlert,
         updateForecasts,
+        setAIInsights,
         setMetrics,
         initializeVillages,
+        setSimulationRunning,
     } = useGridStore();
 
     useEffect(() => {
@@ -25,11 +30,27 @@ export const useWebSocket = () => {
                 };
 
                 wsRef.current.onmessage = (event) => {
-                    const data = JSON.parse(event.data);
+                    let data: any;
+                    try {
+                        data = JSON.parse(event.data);
+                    } catch {
+                        console.error('Failed to parse WebSocket message');
+                        return;
+                    }
 
                     switch (data.type) {
                         case 'VILLAGES_UPDATE':
-                            data.villages.forEach((village: any) => updateVillage(village));
+                            data.villages.forEach((village: Village) => updateVillage(village));
+                            if (data.transfers) setTransfers(data.transfers);
+                            if (data.alerts) data.alerts.forEach((a: any) => addAlert(a));
+                            if (data.forecasts) updateForecasts(data.forecasts);
+                            if (data.ai_insights) setAIInsights(data.ai_insights);
+                            if (data.metrics) {
+                                setMetrics(data.metrics);
+                                if (data.metrics.is_paused !== undefined) {
+                                    setSimulationRunning(!data.metrics.is_paused);
+                                }
+                            }
                             break;
 
                         case 'METRICS_UPDATE':
@@ -58,38 +79,31 @@ export const useWebSocket = () => {
 
                         case 'INIT_DATA':
                             initializeVillages(data.villages);
+                            if (data.paused !== undefined) setSimulationRunning(!data.paused);
                             break;
-
-                        default:
-                            console.log('Unknown message type:', data.type);
                     }
                 };
 
-                wsRef.current.onerror = (error) => {
-                    console.error('WebSocket error:', error);
-                };
+                wsRef.current.onerror = () => {};
 
                 wsRef.current.onclose = () => {
-                    console.log('WebSocket disconnected, attempting to reconnect...');
-                    setTimeout(connectWebSocket, 3000);
+                    reconnectRef.current = setTimeout(connectWebSocket, RECONNECT_DELAY);
                 };
-            } catch (error) {
-                console.error('Failed to connect WebSocket:', error);
-                setTimeout(connectWebSocket, 3000);
+            } catch {
+                reconnectRef.current = setTimeout(connectWebSocket, RECONNECT_DELAY);
             }
         };
 
         connectWebSocket();
 
         return () => {
-            if (wsRef.current) {
-                wsRef.current.close();
-            }
+            if (reconnectRef.current) clearTimeout(reconnectRef.current);
+            if (wsRef.current) wsRef.current.close();
         };
-    }, [updateVillage, addTransfer, removeTransfer, addAlert, updateForecasts, setMetrics, initializeVillages]);
+    }, [updateVillage, addTransfer, removeTransfer, addAlert, updateForecasts, setAIInsights, setMetrics, initializeVillages]);
 
-    const send = useCallback((message: any) => {
-        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+    const send = useCallback((message: object) => {
+        if (wsRef.current?.readyState === WebSocket.OPEN) {
             wsRef.current.send(JSON.stringify(message));
         }
     }, []);

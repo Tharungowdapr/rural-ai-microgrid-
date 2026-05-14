@@ -1,12 +1,10 @@
-from fastapi import FastAPI, WebSocket, BackgroundTasks
+from fastapi import FastAPI, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 import asyncio
 import json
 from datetime import datetime
-from app.simulation.engine import SimulationEngine
-from app.ems.controller import EMSController
-from app.ai.forecaster import Forecaster
 from app.api.routes import router
+from app.dependencies import simulation_engine, ems_controller, forecaster
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -19,16 +17,14 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Global instances
-simulation_engine = SimulationEngine()
-ems_controller = EMSController()
-forecaster = Forecaster()
+# WebSocket connection manager
 connected_clients = set()
+current_ai_insights = []
+last_ai_update = 0
 
 # Include API routes
 app.include_router(router)
@@ -44,6 +40,7 @@ async def websocket_endpoint(websocket: WebSocket):
         await websocket.send_json({
             "type": "INIT_DATA",
             "villages": [v.dict() for v in simulation_engine.villages],
+            "paused": simulation_engine.is_paused,
             "timestamp": datetime.now().isoformat()
         })
         
@@ -63,49 +60,73 @@ async def websocket_endpoint(websocket: WebSocket):
 
 # Background task to run simulation
 async def run_simulation():
-    """Continuous simulation loop"""
+    """Continuous simulation loop - only broadcasts when simulation is unpaused"""
     while True:
         try:
-            # Update simulation state
             await simulation_engine.update()
             
-            # Run EMS logic
-            ems_decisions = await ems_controller.run(simulation_engine.villages)
+            if not simulation_engine.is_paused:
+                ems_decisions = await ems_controller.run(simulation_engine.villages)
+                
+                for decision in ems_decisions:
+                    await simulation_engine.create_transfer(
+                        decision["source"], 
+                        decision["destination"], 
+                        decision["rate"],
+                        decision.get("note")
+                    )
+                
+                forecasts = await forecaster.predict(
+                    simulation_engine.villages,
+                    simulation_engine.weather
+                )
+                
+                global last_ai_update, current_ai_insights
+                current_time = datetime.now().timestamp()
+                if current_time - last_ai_update > 30:
+                    avg_soc = sum(v.soc for v in simulation_engine.villages) / len(simulation_engine.villages) if simulation_engine.villages else 0
+                    insights = []
+                    if avg_soc < 30:
+                        insights.append({"type": "alert", "title": "Low System SOC", "content": f"Average SOC is critical at {avg_soc:.1f}%", "severity": 3})
+                    elif avg_soc < 50:
+                        insights.append({"type": "warning", "title": "Decreasing SOC", "content": f"Average SOC is {avg_soc:.1f}%. Consider reducing load.", "severity": 2})
+                    else:
+                        insights.append({"type": "info", "title": "Stable Grid", "content": f"Average SOC is healthy at {avg_soc:.1f}%", "severity": 1})
+                    deficit_villages = [v.name for v in simulation_engine.villages if v.soc < 30]
+                    if deficit_villages:
+                        insights.append({"type": "alert", "title": "Villages in Deficit", "content": f"Critical load shedding recommended for {', '.join(deficit_villages)}.", "severity": 3})
+                    current_ai_insights = insights
+                    last_ai_update = current_time
+
+                message = {
+                    "type": "VILLAGES_UPDATE",
+                    "villages": [v.dict() for v in simulation_engine.villages],
+                    "transfers": [t.dict() for t in simulation_engine.transfers],
+                    "alerts": [a.dict() for a in simulation_engine.alerts[-20:]],
+                    "forecasts": forecasts,
+                    "ai_insights": current_ai_insights,
+                    "metrics": {
+                        "totalGeneration": simulation_engine.total_generation,
+                        "totalDemand": simulation_engine.total_demand,
+                        "gridStability": simulation_engine.grid_stability,
+                        "weatherCondition": simulation_engine.weather.condition,
+                        "temperature": simulation_engine.weather.temperature,
+                        "humidity": simulation_engine.weather.humidity,
+                        "windSpeed": simulation_engine.weather.windSpeed,
+                        "cloudCover": simulation_engine.weather.cloudCover,
+                        "simulationHour": simulation_engine.simulation_time.hour,
+                        "is_paused": simulation_engine.is_paused,
+                    },
+                    "timestamp": datetime.now().isoformat()
+                }
+                
+                for client in list(connected_clients):
+                    try:
+                        await client.send_json(message)
+                    except Exception as e:
+                        print(f"Error sending to client: {e}")
             
-            # Execute transfers based on EMS decisions
-            for decision in ems_decisions:
-                await simulation_engine.create_transfer(decision)
-            
-            # Generate forecasts
-            forecasts = await forecaster.predict(
-                simulation_engine.villages,
-                simulation_engine.weather
-            )
-            
-            # Prepare update message
-            message = {
-                "type": "VILLAGES_UPDATE",
-                "villages": [v.dict() for v in simulation_engine.villages],
-                "transfers": [t.dict() for t in simulation_engine.transfers],
-                "alerts": [a.dict() for a in simulation_engine.alerts[-20:]],  # Last 20 alerts
-                "forecasts": forecasts,
-                "metrics": {
-                    "totalGeneration": simulation_engine.total_generation,
-                    "totalDemand": simulation_engine.total_demand,
-                    "gridStability": simulation_engine.grid_stability,
-                },
-                "timestamp": datetime.now().isoformat()
-            }
-            
-            # Broadcast to all connected clients
-            for client in connected_clients:
-                try:
-                    await client.send_json(message)
-                except Exception as e:
-                    print(f"Error sending to client: {e}")
-            
-            # Sleep based on simulation speed
-            await asyncio.sleep(2 / simulation_engine.simulation_speed)
+            await asyncio.sleep(2 / max(0.1, simulation_engine.simulation_speed))
         
         except Exception as e:
             print(f"Simulation error: {e}")

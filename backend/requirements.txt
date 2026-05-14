@@ -11,3 +11,4 @@ scikit-learn
 sqlalchemy
 python-jose[cryptography]
 python-dotenv
+tensorflow

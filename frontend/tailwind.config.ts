@@ -1,39 +1,43 @@
-import type { Config } from 'tailwindcss';
+import type { Config } from "tailwindcss";
 
 const config: Config = {
-    content: [
-        './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
-        './src/components/**/*.{js,ts,jsx,tsx,mdx}',
-        './src/app/**/*.{js,ts,jsx,tsx,mdx}',
-    ],
-    theme: {
-        extend: {
-            colors: {
-                'deep-blue': '#050a14',
-                'darker-blue': '#0a0f1e',
-                'cyan': '#00d4ff',
-                'neon-green': '#00ff41',
-                'amber': '#ffa500',
-                'critical-red': '#ff0040',
-                'ai-purple': '#b500ff',
-            },
-            fontFamily: {
-                orbitron: ['Orbitron', 'sans-serif'],
-                inter: ['Inter', 'sans-serif'],
-            },
-            animation: {
-                pulse: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-                glow: 'glow 2s ease-in-out infinite',
-            },
-            keyframes: {
-                glow: {
-                    '0%, 100%': { textShadow: '0 0 10px rgba(0, 212, 255, 0.5)' },
-                    '50%': { textShadow: '0 0 20px rgba(0, 212, 255, 1)' },
-                },
-            },
-        },
+  content: [
+    "./src/pages/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/components/**/*.{js,ts,jsx,tsx,mdx}",
+    "./src/app/**/*.{js,ts,jsx,tsx,mdx}",
+  ],
+  theme: {
+    extend: {
+      colors: {
+        background: '#121212',
+        surface: '#131313',
+        'surface-container': '#1F1F1F',
+        'on-surface': '#e5e2e1',
+        primary: '#3B82F6', // 'Electric Blue' for active energy flow
+        secondary: '#00a572', // 'Emerald Green' for nominal stability
+        tertiary: '#ca8100', // Amber
+        error: '#ffb4ab',
+        emergency: '#93000a',
+        outline: '#8c909f',
+        'outline-variant': 'rgba(255, 255, 255, 0.1)',
+      },
+      fontFamily: {
+        roboto: ['var(--font-roboto-flex)', 'sans-serif'],
+        mono: ['var(--font-jetbrains-mono)', 'monospace'],
+      },
+      backdropBlur: {
+        glass: '12px',
+      },
+      borderRadius: {
+        sm: '0.25rem',
+        DEFAULT: '0.5rem', // 8px
+        md: '0.75rem',
+        lg: '1rem', // 16px
+        xl: '1.5rem',
+        full: '9999px',
+      }
     },
-    plugins: [],
+  },
+  plugins: [],
 };
-
 export default config;

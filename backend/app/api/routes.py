@@ -1,83 +1,245 @@
 from fastapi import APIRouter, HTTPException
-from typing import List
+from typing import Optional
+from pydantic import BaseModel
+from app.dependencies import simulation_engine, ems_controller, forecaster
+from app.simulation.engine import Alert
+import random
+import time
+
+
+class WeatherUpdate(BaseModel):
+    temperature: Optional[float] = None
+    humidity: Optional[float] = None
+    windSpeed: Optional[float] = None
+    cloudCover: Optional[float] = None
+    irradiance: Optional[float] = None
+    dayTimeHour: Optional[int] = None
+    condition: Optional[str] = None
+
+
+class VillageUpdate(BaseModel):
+    soc: Optional[float] = None
+    demand: Optional[float] = None
+    solarGeneration: Optional[float] = None
+    criticalLoad: Optional[float] = None
+    standardLoad: Optional[float] = None
+    hospitalDemand: Optional[float] = None
+    waterPumpDemand: Optional[float] = None
+    residentialDemand: Optional[float] = None
+    schoolDemand: Optional[float] = None
+    emergencySpike: Optional[float] = None
+    solarPanelCapacity: Optional[float] = None
+    chargingRate: Optional[float] = None
+    temperature: Optional[float] = None
+
 
 router = APIRouter(prefix="/api", tags=["api"])
 
-# These routes are placeholders and will be fully implemented
-# Most functionality is handled through WebSocket
 
 @router.get("/villages")
 async def get_villages():
-    """Get current village states"""
-    return {"message": "Use WebSocket for real-time updates"}
+    return [v.dict() for v in simulation_engine.villages]
+
 
 @router.get("/villages/{village_id}")
 async def get_village(village_id: str):
-    """Get specific village details"""
-    return {"village_id": village_id, "message": "Use WebSocket for real-time updates"}
+    village = next((v for v in simulation_engine.villages if v.id == village_id), None)
+    if not village:
+        raise HTTPException(status_code=404, detail="Village not found")
+    return village.dict()
+
 
 @router.get("/transfers")
 async def get_transfers():
-    """Get active power transfers"""
-    return {"message": "Use WebSocket for real-time updates"}
+    return [t.dict() for t in simulation_engine.transfers]
+
 
 @router.get("/alerts")
 async def get_alerts():
-    """Get system alerts"""
-    return {"message": "Use WebSocket for real-time updates"}
+    return [a.dict() for a in simulation_engine.alerts]
+
 
 @router.get("/forecast")
 async def get_forecast():
-    """Get AI forecast data"""
-    return {"message": "Use WebSocket for real-time updates"}
+    forecasts = await forecaster.predict(
+        simulation_engine.villages,
+        simulation_engine.weather
+    )
+    return forecasts
+
 
 @router.post("/scenario/{scenario_id}")
 async def trigger_scenario(scenario_id: str):
-    """Manually trigger a test scenario"""
     valid_scenarios = [
-        "heatwave",
-        "cloudcover",
-        "relay-failure",
-        "hospital-surge",
-        "blackout",
-        "storm",
+        "heatwave", "cloudcover", "relay-failure",
+        "hospital-surge", "blackout", "storm",
     ]
-    
     if scenario_id not in valid_scenarios:
         raise HTTPException(status_code=400, detail=f"Invalid scenario: {scenario_id}")
-    
+    await simulation_engine.trigger_scenario(scenario_id)
     return {"scenario": scenario_id, "status": "triggered"}
+
 
 @router.post("/control/simulation/pause")
 async def pause_simulation():
-    """Pause the simulation"""
+    simulation_engine.is_paused = True
     return {"status": "paused"}
+
 
 @router.post("/control/simulation/resume")
 async def resume_simulation():
-    """Resume the simulation"""
+    simulation_engine.is_paused = False
     return {"status": "resumed"}
+
+
+@router.post("/simulation/start")
+async def start_simulation():
+    simulation_engine.is_paused = False
+    simulation_engine.simulation_speed = 1.0
+    return {"status": "started"}
+
+
+@router.post("/simulation/stop")
+async def stop_simulation():
+    simulation_engine.is_paused = True
+    return {"status": "stopped"}
+
+
+@router.post("/simulation/toggle")
+async def toggle_simulation():
+    simulation_engine.is_paused = not simulation_engine.is_paused
+    return {"paused": simulation_engine.is_paused}
+
+
+@router.post("/simulation/randomize")
+async def randomize_simulation():
+    conditions = ["sunny", "partly_cloudy", "cloudy", "rainy", "storm"]
+    for v in simulation_engine.villages:
+        v.soc = round(random.uniform(20, 95), 1)
+        v.hospitalDemand = round(random.uniform(15, 50), 1)
+        v.waterPumpDemand = round(random.uniform(10, 35), 1)
+        v.residentialDemand = round(random.uniform(30, 80), 1)
+        v.schoolDemand = round(random.uniform(10, 40), 1)
+        v.emergencySpike = 0
+        v.solarPanelCapacity = round(random.uniform(200, 400), 1)
+        v.temperature = round(random.uniform(5, 35), 1)
+        v.chargingRate = round(random.uniform(0.05, 0.2), 2)
+    
+    simulation_engine.weather.condition = random.choice(conditions)
+    simulation_engine.weather.cloudCover = round(random.uniform(0, 100), 1)
+    simulation_engine.weather.temperature = round(random.uniform(5, 35), 1)
+    simulation_engine.weather.humidity = round(random.uniform(30, 95), 1)
+    simulation_engine.weather.windSpeed = round(random.uniform(0, 15), 1)
+    
+    hour = random.randint(0, 23)
+    simulation_engine.simulation_time = simulation_engine.simulation_time.replace(hour=hour)
+    
+    return {"status": "randomized"}
+
 
 @router.post("/control/simulation/speed/{speed}")
 async def set_simulation_speed(speed: float):
-    """Set simulation speed multiplier"""
-    if speed < 0.5 or speed > 4:
-        raise HTTPException(status_code=400, detail="Speed must be between 0.5 and 4")
-    
+    if speed < 0 or speed > 4:
+        raise HTTPException(status_code=400, detail="Speed must be between 0 and 4")
+    simulation_engine.simulation_speed = speed
     return {"speed": speed}
 
-@router.post("/control/transfer/{village_id}/request")
-async def request_transfer(village_id: str, amount: float):
-    """Request power transfer for a village"""
+
+@router.post("/control/transfer/request")
+async def request_transfer(source_id: str, destination_id: str, amount: float):
     if amount <= 0:
         raise HTTPException(status_code=400, detail="Amount must be positive")
-    
-    return {"village": village_id, "amount": amount, "status": "requested"}
+    await simulation_engine.create_transfer(source_id, destination_id, amount)
+    return {"source": source_id, "destination": destination_id, "amount": amount, "status": "requested"}
+
 
 @router.post("/control/load/{village_id}/shed")
 async def shed_load(village_id: str, percentage: float):
-    """Manually shed load for a village"""
     if percentage < 0 or percentage > 100:
         raise HTTPException(status_code=400, detail="Percentage must be between 0 and 100")
-    
+    village = next((v for v in simulation_engine.villages if v.id == village_id), None)
+    if not village:
+        raise HTTPException(status_code=404, detail="Village not found")
+    village.standardShedPercentage = min(100, percentage)
     return {"village": village_id, "shed_percentage": percentage, "status": "executed"}
+
+
+@router.post("/control/emergency/{village_id}")
+async def trigger_emergency_spike(village_id: str, spike_kw: float = 80):
+    village = next((v for v in simulation_engine.villages if v.id == village_id), None)
+    if not village:
+        raise HTTPException(status_code=404, detail="Village not found")
+    village.emergencySpike = max(0, spike_kw)
+    alert = Alert(
+        id=f"emergency-{simulation_engine._alert_id}",
+        type="CRITICAL",
+        message=f"Emergency spike triggered at {village.name}: +{spike_kw:.0f} kW",
+        severity=3,
+    )
+    simulation_engine._alert_id += 1
+    simulation_engine.alerts.append(alert)
+    return {"status": "emergency_spike_set", "village": village_id, "spike_kw": spike_kw}
+
+
+@router.put("/weather")
+async def update_weather(weather_update: WeatherUpdate):
+    if weather_update.temperature is not None:
+        simulation_engine.weather.temperature = weather_update.temperature
+    if weather_update.humidity is not None:
+        simulation_engine.weather.humidity = weather_update.humidity
+    if weather_update.windSpeed is not None:
+        simulation_engine.weather.windSpeed = weather_update.windSpeed
+    if weather_update.cloudCover is not None:
+        simulation_engine.weather.cloudCover = weather_update.cloudCover
+    if weather_update.irradiance is not None:
+        simulation_engine.weather.irradiance = weather_update.irradiance
+    if weather_update.dayTimeHour is not None:
+        current = simulation_engine.simulation_time
+        simulation_engine.simulation_time = current.replace(hour=int(weather_update.dayTimeHour) % 24)
+    if weather_update.condition is not None:
+        simulation_engine.weather.condition = weather_update.condition
+    return {"status": "success"}
+
+
+@router.put("/villages/{village_id}")
+async def update_village_params(village_id: str, village_update: VillageUpdate):
+    village = next((v for v in simulation_engine.villages if v.id == village_id), None)
+    if not village:
+        raise HTTPException(status_code=404, detail="Village not found")
+    
+    fields = {
+        "soc": "soc", "demand": "demand", "solarGeneration": "solarGeneration",
+        "criticalLoad": "criticalLoad", "standardLoad": "standardLoad",
+        "hospitalDemand": "hospitalDemand", "waterPumpDemand": "waterPumpDemand",
+        "residentialDemand": "residentialDemand", "schoolDemand": "schoolDemand",
+        "emergencySpike": "emergencySpike", "solarPanelCapacity": "solarPanelCapacity",
+        "chargingRate": "chargingRate", "temperature": "temperature",
+    }
+    for field, attr in fields.items():
+        val = getattr(village_update, field, None)
+        if val is not None:
+            setattr(village, attr, val)
+    
+    return village.dict()
+
+
+@router.post("/village/{village_id}/infrastructure")
+async def update_infrastructure(
+    village_id: str,
+    hospital: Optional[float] = None,
+    water_pump: Optional[float] = None,
+    residential: Optional[float] = None,
+    school: Optional[float] = None,
+):
+    village = next((v for v in simulation_engine.villages if v.id == village_id), None)
+    if not village:
+        raise HTTPException(status_code=404, detail="Village not found")
+    if hospital is not None:
+        village.hospitalDemand = max(0, hospital)
+    if water_pump is not None:
+        village.waterPumpDemand = max(0, water_pump)
+    if residential is not None:
+        village.residentialDemand = max(0, residential)
+    if school is not None:
+        village.schoolDemand = max(0, school)
+    return village.dict()

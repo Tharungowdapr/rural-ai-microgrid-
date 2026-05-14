@@ -48,14 +48,26 @@ class EMSController:
         # Handle load shedding for critical low SOC
         for village in villages:
             if village.soc < self.min_soc_threshold:
-                # Shed non-critical loads first
-                if village.standardLoad > 0:
-                    village.standardLoad *= 0.5  # Reduce by 50%
-                    
-                    # If still low, shed critical loads
-                    if village.soc < 20:
-                        village.criticalLoad *= 0.8
+                village.standardShedPercentage = 50
+                if village.soc < 20:
+                    village.criticalShedPercentage = 20
+            elif village.soc > self.min_soc_threshold + 10:
+                village.criticalShedPercentage = 0
+                village.standardShedPercentage = 0
         
+        # Predictive EMS: Check for villages likely to enter deficit
+        for village in villages:
+            if village.soc < 80 and village.solarGeneration < village.demand:
+                # Proactively look for surplus
+                if not any(d["destination"] == village.id for d in decisions):
+                    best_supplier = self._find_best_supplier(village, surplus_villages, 10)
+                    if best_supplier:
+                        decisions.append({
+                            "source": best_supplier.id,
+                            "destination": village.id,
+                            "rate": 20, # Preventive trickle charge
+                        })
+
         return decisions
     
     def _find_best_supplier(
@@ -70,11 +82,11 @@ class EMSController:
         def distance(v1: Village, v2: Village) -> float:
             return ((v1.x - v2.x) ** 2 + (v1.y - v2.y) ** 2) ** 0.5
         
-        # Sort by distance and available power
+        # Sort by distance and available power, explicitly ensuring charge flows from higher to lower SOC
         candidates = [
             (v, distance(deficit_village, v), v.solarGeneration - v.demand)
             for v in surplus_villages
-            if v.solarGeneration - v.demand > 5  # Has available power
+            if v.solarGeneration - v.demand > 5 and v.soc > deficit_village.soc
         ]
         
         if not candidates:
@@ -89,14 +101,25 @@ class EMSController:
         """
         Reroute transfers when a relay fails
         """
-        # This would need network topology information
-        # For now, just remove transfers through the failed relay
+        # Simulate topology knowledge: Hubs are connected to everything, 
+        # Outposts are connected to nearest Hub.
+        # If a "relay" fails, we try to route through a different Hub.
         decisions = []
         
-        # In a real system, find alternate paths
-        for village in villages:
-            if village.status == VillageStatus.DEFICIT:
-                # Try to find alternate suppliers
-                pass
+        deficit_villages = [v for v in villages if v.status == VillageStatus.DEFICIT]
+        surplus_villages = [v for v in villages if v.status == VillageStatus.SURPLUS]
+        
+        for deficit in deficit_villages:
+            # Avoid the "failed" relay path by picking the 2nd best supplier
+            # if the best one is usually routed through that relay.
+            # (In this simplified model, we just re-run the search)
+            supplier = self._find_best_supplier(deficit, surplus_villages, 50)
+            if supplier:
+                decisions.append({
+                    "source": supplier.id,
+                    "destination": deficit.id,
+                    "rate": 40,
+                    "note": f"Rerouted due to {relay_id} failure"
+                })
         
         return decisions

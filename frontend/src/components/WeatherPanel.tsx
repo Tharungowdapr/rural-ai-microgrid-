@@ -1,81 +1,113 @@
 'use client';
 
-import { Cloud, Wind, Droplets, Sun } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Cloud, Wind, Droplets, Sun, Clock } from 'lucide-react';
 
 export default function WeatherPanel() {
-    // Demo weather data - would be updated from backend
-    const weather = {
-        condition: 'Partly Cloudy',
-        temperature: 28,
-        humidity: 65,
-        windSpeed: 12,
-        cloudCover: 35,
-        irradiance: 850, // W/m²
-        visibility: 10,
+    const [temperature, setTemperature] = useState(25);
+    const [cloudCover, setCloudCover] = useState(30);
+    const [windSpeed, setWindSpeed] = useState(10);
+    const [dayTimeHour, setDayTimeHour] = useState(12);
+
+    const updateWeather = async (params: any) => {
+        try {
+            await fetch('http://localhost:8000/api/weather', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(params),
+            });
+        } catch (error) {
+            console.error('Failed to update weather', error);
+        }
     };
 
     return (
-        <div className="space-y-2">
-            <h3 className="text-xs font-bold font-orbitron text-cyan glow-text">
-                WEATHER CONDITIONS
+        <div className="space-y-4">
+            <h3 className="text-xs font-bold text-outline uppercase tracking-wider">
+                Global Environment Controls
             </h3>
 
-            {/* Main Weather Card */}
-            <div className="glass-card p-2 rounded">
-                <div className="flex items-center justify-between mb-2">
-                    <div className="flex items-center gap-2">
-                        <Sun size={14} className="text-amber" />
-                        <span className="text-xs font-bold">{weather.condition}</span>
-                    </div>
-                    <span className="text-sm font-bold text-amber">{weather.temperature}°C</span>
-                </div>
-
-                {/* Metrics Grid */}
-                <div className="grid grid-cols-2 gap-2">
-                    <div className="bg-darker-blue rounded p-1.5">
-                        <div className="flex items-center gap-1 mb-0.5">
-                            <Droplets size={12} className="text-cyan" />
-                            <span className="text-xs text-gray-400">Humidity</span>
+            <div className="space-y-4 pt-2">
+                
+                {/* Time of Day */}
+                <div>
+                    <div className="flex justify-between items-center mb-1">
+                        <div className="flex items-center gap-1 text-on-surface">
+                            <Clock size={14} />
+                            <span className="text-sm font-medium">Time of Day</span>
                         </div>
-                        <p className="text-xs font-bold text-cyan">{weather.humidity}%</p>
+                        <span className="text-sm font-bold text-primary font-mono">{dayTimeHour}:00</span>
                     </div>
-
-                    <div className="bg-darker-blue rounded p-1.5">
-                        <div className="flex items-center gap-1 mb-0.5">
-                            <Wind size={12} className="text-neon-green" />
-                            <span className="text-xs text-gray-400">Wind</span>
-                        </div>
-                        <p className="text-xs font-bold text-neon-green">{weather.windSpeed} km/h</p>
-                    </div>
-
-                    <div className="bg-darker-blue rounded p-1.5">
-                        <div className="flex items-center gap-1 mb-0.5">
-                            <Sun size={12} className="text-amber" />
-                            <span className="text-xs text-gray-400">Irradiance</span>
-                        </div>
-                        <p className="text-xs font-bold text-amber">{weather.irradiance} W/m²</p>
-                    </div>
-
-                    <div className="bg-darker-blue rounded p-1.5">
-                        <div className="flex items-center gap-1 mb-0.5">
-                            <Cloud size={12} className="text-cyan" />
-                            <span className="text-xs text-gray-400">Cloud Cover</span>
-                        </div>
-                        <p className="text-xs font-bold text-cyan">{weather.cloudCover}%</p>
-                    </div>
-                </div>
-            </div>
-
-            {/* Solar Impact */}
-            <div className="glass-card p-2 rounded text-xs border-l-2 border-neon-green">
-                <p className="text-gray-400 mb-1">Solar Impact</p>
-                <div className="w-full bg-gray-700 rounded-full h-1.5">
-                    <div
-                        className="h-full bg-gradient-to-r from-amber to-neon-green rounded-full"
-                        style={{ width: '85%' }}
+                    <input 
+                        type="range" min="0" max="23" 
+                        value={dayTimeHour}
+                        onChange={(e) => {
+                            setDayTimeHour(Number(e.target.value));
+                            updateWeather({ dayTimeHour: Number(e.target.value) });
+                        }}
+                        className="w-full"
                     />
                 </div>
-                <p className="text-xs text-gray-500 mt-1">Optimal generation conditions</p>
+
+                {/* Temperature */}
+                <div>
+                    <div className="flex justify-between items-center mb-1">
+                        <div className="flex items-center gap-1 text-on-surface">
+                            <Sun size={14} />
+                            <span className="text-sm font-medium">Temperature</span>
+                        </div>
+                        <span className="text-sm font-bold text-tertiary font-mono">{temperature}°C</span>
+                    </div>
+                    <input 
+                        type="range" min="-10" max="50" 
+                        value={temperature}
+                        onChange={(e) => {
+                            setTemperature(Number(e.target.value));
+                            updateWeather({ temperature: Number(e.target.value) });
+                        }}
+                        className="w-full accent-amber-500"
+                    />
+                </div>
+
+                {/* Cloud Cover */}
+                <div>
+                    <div className="flex justify-between items-center mb-1">
+                        <div className="flex items-center gap-1 text-on-surface">
+                            <Cloud size={14} />
+                            <span className="text-sm font-medium">Cloud Cover</span>
+                        </div>
+                        <span className="text-sm font-bold text-outline">{cloudCover}%</span>
+                    </div>
+                    <input 
+                        type="range" min="0" max="100" 
+                        value={cloudCover}
+                        onChange={(e) => {
+                            setCloudCover(Number(e.target.value));
+                            updateWeather({ cloudCover: Number(e.target.value) });
+                        }}
+                        className="w-full accent-slate-400"
+                    />
+                </div>
+
+                {/* Wind Speed */}
+                <div>
+                    <div className="flex justify-between items-center mb-1">
+                        <div className="flex items-center gap-1 text-on-surface">
+                            <Wind size={14} />
+                            <span className="text-sm font-medium">Wind Speed</span>
+                        </div>
+                        <span className="text-sm font-bold text-emerald-500">{windSpeed} km/h</span>
+                    </div>
+                    <input 
+                        type="range" min="0" max="150" 
+                        value={windSpeed}
+                        onChange={(e) => {
+                            setWindSpeed(Number(e.target.value));
+                            updateWeather({ windSpeed: Number(e.target.value) });
+                        }}
+                        className="w-full accent-emerald-500"
+                    />
+                </div>
             </div>
         </div>
     );

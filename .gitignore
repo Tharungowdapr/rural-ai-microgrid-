@@ -25,10 +25,6 @@ Thumbs.db
 logs/
 *.log
 
-# ML
-ml/lstm_model.h5
-backend/ml/lstm_model.h5
-
 # Misc
 *.egg-info/
 dist/

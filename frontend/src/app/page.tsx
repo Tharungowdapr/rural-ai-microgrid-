@@ -1,96 +1,72 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import Header from '@/components/Header';
-import MetricsStrip from '@/components/MetricsStrip';
-import Topology from '@/components/Topology';
-import VillageCards from '@/components/VillageCards';
+import dynamic from 'next/dynamic';
 import AIPanel from '@/components/AIPanel';
 import TransferLog from '@/components/TransferLog';
-import AlertStack from '@/components/AlertStack';
-import BatteryMonitor from '@/components/BatteryMonitor';
 import WeatherPanel from '@/components/WeatherPanel';
-import ScenarioControls from '@/components/ScenarioControls';
-import SystemSettings from '@/components/SystemSettings';
-import { useWebSocket } from '@/hooks/useWebSocket';
-import { useGridStore } from '@/hooks/useGridStore';
+import AlertCenter from '@/components/AlertCenter';
+import VillageBar from '@/components/VillageBar';
+import CityControlModal from '@/components/CityControlModal';
+import { useGridStore, Village } from '@/hooks/useGridStore';
 import { Settings } from 'lucide-react';
+import SystemSettings from '@/components/SystemSettings';
+
+const Topology = dynamic(() => import('@/components/Topology'), { ssr: false });
 
 export default function Dashboard() {
-    const { send } = useWebSocket();
-    const { simulationRunning, setSimulationRunning } = useGridStore();
+    const [selectedVillage, setSelectedVillage] = useState<Village | null>(null);
     const [showSettings, setShowSettings] = useState(false);
-    useEffect(() => {
-        setSimulationRunning(true);
-    }, [setSimulationRunning]);
 
-return (
-    <div className="w-screen h-screen bg-deep-blue overflow-hidden flex flex-col">
-        {/* Header */}
-        <Header />
+    return (
+        <div className="w-screen h-screen overflow-hidden bg-[#121212] relative font-roboto text-on-surface">
 
-        {/* Settings Button */}
-        <button
-            onClick={() => setShowSettings(true)}
-            className="fixed top-24 right-4 z-40 p-2 glass-card hover:glass-card-hover rounded transition flex items-center gap-2 text-cyan glow-text"
-            title="Open System Settings"
-        >
-            <Settings size={20} />
-            <span className="text-xs font-bold">SETTINGS</span>
-        </button>
+            <div className="absolute inset-0 z-0 pointer-events-auto">
+                <Topology onCityClick={(village) => setSelectedVillage(village)} />
+            </div>
 
-        {/* Settings Modal */}
-        <SystemSettings isOpen={showSettings} onClose={() => setShowSettings(false)} />
+            <div className="absolute inset-0 z-30 pointer-events-none p-3 flex flex-col">
 
-        {/* Main Grid Layout */}
-        <div className="flex-1 flex gap-4 p-4">
-            {/* Left Column: Topology and Village Cards */}
-            <div className="flex-1 flex flex-col gap-4">
-                {/* Topology Map */}
-                <div className="flex-1 glass-card p-4 rounded-lg">
-                    <Topology />
+                <div className="w-full flex-none pointer-events-auto bg-zinc-900/70 backdrop-blur-md border border-zinc-800/50 rounded-xl">
+                    <Header />
                 </div>
 
-                {/* Village Cards Grid */}
-                <div className="glass-card p-4 rounded-lg overflow-y-auto max-h-64">
-                    <VillageCards />
+                <div className="flex-1 relative">
+                    <div className="absolute left-0 top-0 bottom-0 w-[220px] flex flex-col gap-3 pointer-events-auto overflow-y-auto">
+                        <div className="bg-zinc-900/60 backdrop-blur-md border border-zinc-800/50 rounded-xl p-3">
+                            <AlertCenter />
+                        </div>
+                        <div className="flex-1 bg-zinc-900/60 backdrop-blur-md border border-zinc-800/50 rounded-xl p-3 min-h-[150px]">
+                            <TransferLog />
+                        </div>
+                    </div>
+
+                    <div className="absolute right-0 top-0 bottom-0 w-[220px] flex flex-col gap-3 pointer-events-auto overflow-y-auto">
+                        <div className="flex-1 bg-zinc-900/60 backdrop-blur-md border border-zinc-800/50 rounded-xl p-3">
+                            <AIPanel />
+                        </div>
+                        <div className="bg-zinc-900/60 backdrop-blur-md border border-zinc-800/50 rounded-xl p-3">
+                            <WeatherPanel />
+                        </div>
+                    </div>
+                </div>
+
+                <div className="w-full flex-none pointer-events-auto bg-zinc-900/60 backdrop-blur-md border border-zinc-800/50 rounded-xl px-3 py-2">
+                    <VillageBar />
                 </div>
             </div>
 
-            {/* Right Column: AI Panel and Controls */}
-            <div className="w-96 flex flex-col gap-4">
-                {/* AI Panel */}
-                <div className="flex-1 glass-card p-4 rounded-lg overflow-y-auto">
-                    <AIPanel />
-                </div>
+            <button
+                onClick={() => setShowSettings(true)}
+                className="absolute bottom-20 left-1/2 -translate-x-1/2 z-40 px-4 py-2 bg-zinc-800/80 hover:bg-zinc-700 backdrop-blur-md border border-zinc-700/50 rounded-full flex items-center gap-2 text-zinc-300 pointer-events-auto transition"
+            >
+                <Settings size={16} />
+                <span className="text-xs font-bold tracking-widest uppercase">System Settings</span>
+            </button>
 
-                {/* Weather Panel */}
-                <div className="glass-card p-4 rounded-lg">
-                    <WeatherPanel />
-                </div>
-
-                {/* Scenario Controls */}
-                <div className="glass-card p-4 rounded-lg">
-                    <ScenarioControls />
-                </div>
-            </div>
+            <SystemSettings isOpen={showSettings} onClose={() => setShowSettings(false)} />
+            <CityControlModal village={selectedVillage} onClose={() => setSelectedVillage(null)} />
         </div>
-
-        {/* Bottom Section: Transfers, Batteries, Alerts */}
-        <div className="flex gap-4 p-4 h-64">
-            {/* Transfer Log */}
-            <div className="flex-1 glass-card p-4 rounded-lg overflow-y-auto">
-                <TransferLog />
-            </div>
-
-            {/* Battery Monitor */}
-            <div className="flex-1 glass-card p-4 rounded-lg overflow-y-auto">
-                <BatteryMonitor />
-            </div>
-        </div>
-
-        {/* Alert Stack - Floating */}
-        <AlertStack />
-    </div>
     );
 }

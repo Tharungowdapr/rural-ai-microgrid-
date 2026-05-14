@@ -1,123 +1,98 @@
-# Rural AI Microgrid Energy Management System
+# Rural AI Microgrid
 
-A full-stack application to monitor, simulate, and optimize decentralized power distribution in remote areas. It provides a real-time "Digital Twin" of a mesh-based energy grid with AI-powered forecasting and autonomous energy management.
-
-## Features
-
-- **Real-Time Simulation** — Continuous simulation loop updating every 2–5 seconds
-- **Interactive Mesh Topology** — SVG visualization with animated power flow
-- **AI Predictive Analytics** — LSTM-based 6-hour forecasting for solar and load trends
-- **Autonomous EMS Logic** — Intelligent load shedding and power routing
-- **Live Dashboard** — Real-time metrics, alerts, and system state visualization
-- **Scenario Testing** — Manually trigger realistic grid failure events
+A full-stack AI-powered decentralized smart-grid simulation for 5 villages. Each village generates solar energy, stores it in batteries, and autonomously shares power through a mesh network using an Energy Management System (EMS) with LSTM-based AI predictions.
 
 ## Quick Start
 
-### Prerequisites
-
-- Python 3.9+
-- Node.js 18+
-- Make
-
-### Setup & Run
-
 ```bash
-# 1. Clone and enter the project
-git clone https://github.com/Tharungowdapr/rural-ai-microgrid-.git
-cd rural-ai-microgrid
-
-# 2. One-time setup (creates venv, installs dependencies)
+# Setup (first time)
 make setup
 
-# 3. Start both backend and frontend
-make dev
+# Start backend (Terminal 1)
+make backend
+
+# Start frontend (Terminal 2)
+make frontend-dev
+
+# Open http://localhost:3000
 ```
 
-- Frontend: http://localhost:3000
-- Backend: http://localhost:8000
-- API Docs: http://localhost:8000/docs
+## Features
 
-### Individual Commands
+### Dashboard
+- **Network Topology** — SVG mesh map with 5 village nodes, animated power flow lines
+- **AI Predictions** — 6-hour LSTM forecast (demand, generation, confidence)
+- **EMS Console** — Live transfer decisions and system alerts
+- **Weather Panel** — Current conditions affecting solar generation
+- **Village Bar** — SOC, demand, generation, temperature, frequency per village
 
-```bash
-make help          # Show all commands
-make backend       # Backend only (port 8000)
-make frontend      # Frontend only (port 3000)
-make build         # Build frontend for production
-make clean         # Remove build artifacts
-make kill-all      # Stop all running processes
-make docker-up     # Run with Docker Compose
-make docker-down   # Stop Docker containers
-```
+### Controls
+- **Predict Load** — Runs LSTM/heuristic forecast, updates AI panel chart
+- **Random Mode** — Randomizes all village parameters + weather
+- **Start / Pause** — Begins/stops real-time energy flow simulation
+- **Village Config** — Click any node to adjust SOC, panel capacity, infrastructure loads, emergency spikes
+- **System Settings** — Simulation speed (0.5x–4x), scenario triggers (heatwave, storm, blackout, etc.), EMS/battery parameters
 
 ## Architecture
 
 ```
-rural-ai-microgrid/
-├── frontend/              # Next.js React dashboard
-│   ├── src/app/           # App router, layout, globals
-│   ├── src/components/    # React components
-│   ├── src/hooks/         # Zustand store, WebSocket hooks
-│   └── package.json
-├── backend/               # FastAPI backend server
-│   ├── app/
-│   │   ├── main.py        # FastAPI app, WebSocket handler
-│   │   ├── api/           # REST endpoints
-│   │   ├── simulation/    # Grid simulation engine
-│   │   ├── ems/           # Energy Management System
-│   │   └── ai/            # LSTM forecaster
-│   ├── ml/                # Model inference & preprocessing
-│   └── requirements.txt
-├── ml/                    # Pre-trained LSTM model
-├── Makefile               # Build & dev orchestration
-├── setup.sh               # One-click dependency installer
-└── docker-compose.yml     # Docker Compose config
+backend/                  # FastAPI server
+├── app/main.py           # Server + WebSocket + simulation loop
+├── app/api/routes.py     # REST endpoints (villages, forecast, scenarios, etc.)
+├── app/simulation/       # Grid simulation engine
+├── app/ems/              # Energy Management System
+├── app/ai/               # LSTM forecaster (heuristic fallback)
+└── app/data/             # UCI energy dataset patterns
+
+frontend/                 # Next.js 14 dashboard
+├── src/app/page.tsx      # Main layout
+├── src/components/       # React components
+└── src/hooks/            # Zustand store + WebSocket hook
 ```
 
-## AI/ML System
+## Tech Stack
 
-Pre-trained LSTM model (`lstm_model.h5`) predicts future energy demand, solar generation trends, battery depletion risk, and optimal transfer windows.
+| Layer | Stack |
+|-------|-------|
+| Backend | FastAPI (Python), WebSocket, NumPy |
+| AI/ML | TensorFlow/Keras LSTM (fallback: heuristic) |
+| Frontend | Next.js 14, React, TypeScript |
+| State | Zustand |
+| Charts | Recharts |
+| Styling | Tailwind CSS |
 
-**Model:** LSTM(64) → Dropout(0.2) → LSTM(32) → Dense(16) → Dense(1)
+## API Endpoints
 
-## Simulation Engine
-
-### Village States
-- **SURPLUS** — Generation > Demand
-- **BALANCED** — SOC 50–100%
-- **WARNING** — SOC 30–50%
-- **DEFICIT** — SOC < 30%
-
-### Scenario Triggers
-Heatwave, Cloud Cover, Relay Failure, Hospital Surge, Blackout, Storm
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/villages` | All village states |
+| `PUT /api/villages/{id}` | Update village parameters |
+| `GET /api/forecast` | 6-hour demand/generation forecast |
+| `POST /api/simulation/start` | Start simulation |
+| `POST /api/simulation/stop` | Stop simulation |
+| `POST /api/simulation/randomize` | Randomize all parameters |
+| `POST /api/scenario/{id}` | Trigger scenario event |
+| `PUT /api/weather` | Update weather conditions |
+| `WS /ws` | Real-time state broadcasts |
 
 ## WebSocket Protocol
 
-Connect to `ws://localhost:8000/ws`. Messages contain village states, active transfers, alerts, and system metrics.
+Connect to `ws://localhost:8000/ws`. Receives:
+- `INIT_DATA` — Initial village states on connect
+- `VILLAGES_UPDATE` — Periodically when simulation runs (every ~2s)
 
-## Configuration
+## Simulation States
 
-**Frontend** (`.env.local`):
-```
-NEXT_PUBLIC_WS_URL=ws://localhost:8000/ws
-NEXT_PUBLIC_API_URL=http://localhost:8000
-```
+| Status | Condition | Color |
+|--------|-----------|-------|
+| SURPLUS | Generation > Demand + 50kW | Green |
+| BALANCED | SOC 50–100% | Blue |
+| WARNING | SOC 30–50% | Yellow |
+| DEFICIT | SOC < 30% | Red |
 
-**Backend** (`.env`):
-```
-DATABASE_URL=postgresql://user:pass@localhost/microgrid
-REDIS_URL=redis://localhost:6379
-GEMINI_API_KEY=your_key_here
-```
+## Scenarios
 
-## Docker
-
-```bash
-make docker-build    # Build images
-make docker-up       # Start containers
-make docker-down     # Stop containers
-make docker-logs     # View logs
-```
+Heatwave, Heavy Clouds, Hospital Surge, Relay Failure, Blackout, Storm — trigger from System Settings panel.
 
 ## License
 

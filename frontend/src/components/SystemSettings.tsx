@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useSystemConfig, SystemConfig } from '@/hooks/useSystemConfig';
-import { Settings, Save, RotateCcw, X } from 'lucide-react';
+import { Settings, Save, RotateCcw, X, Play, Zap, CloudSun, AlertTriangle } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface SystemSettingsModalProps {
@@ -13,7 +13,7 @@ interface SystemSettingsModalProps {
 export default function SystemSettingsModal({ isOpen, onClose }: SystemSettingsModalProps) {
     const { config, updateConfig, resetConfig } = useSystemConfig();
     const [localConfig, setLocalConfig] = useState(config);
-    const [activeTab, setActiveTab] = useState<'city' | 'charging' | 'solar' | 'ems' | 'battery'>('city');
+    const [activeTab, setActiveTab] = useState<'city' | 'charging' | 'solar' | 'ems' | 'battery' | 'scenarios' | 'speed'>('city');
 
     const handleChange = (key: keyof SystemConfig, value: any) => {
         setLocalConfig((prev) => ({
@@ -22,8 +22,28 @@ export default function SystemSettingsModal({ isOpen, onClose }: SystemSettingsM
         }));
     };
 
-    const handleSave = () => {
+    const handleSave = async () => {
         updateConfig(localConfig);
+        try {
+            await fetch('http://localhost:8000/api/weather', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cloudCover: localConfig.averageCloudCover,
+                    irradiance: localConfig.baseSolarIrradiance,
+                }),
+            });
+            for (const v of (await (await fetch('http://localhost:8000/api/villages')).json())) {
+                await fetch(`http://localhost:8000/api/villages/${v.id}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        chargingRate: localConfig.maxChargeRate,
+                        maxCapacity: localConfig.averageHubCapacity,
+                    }),
+                });
+            }
+        } catch {}
         onClose();
     };
 
@@ -33,11 +53,13 @@ export default function SystemSettingsModal({ isOpen, onClose }: SystemSettingsM
     };
 
     const tabs = [
-        { id: 'city' as const, label: '🏙️ City Config', icon: '🏢' },
-        { id: 'charging' as const, label: '🔋 Charging', icon: '⚡' },
-        { id: 'solar' as const, label: '☀️ Solar', icon: '☀️' },
-        { id: 'ems' as const, label: '⚙️ EMS', icon: '⚙️' },
-        { id: 'battery' as const, label: '🔌 Battery', icon: '🔌' },
+        { id: 'city' as const, label: 'City Config' },
+        { id: 'charging' as const, label: 'Charging' },
+        { id: 'solar' as const, label: 'Solar' },
+        { id: 'ems' as const, label: 'EMS' },
+        { id: 'battery' as const, label: 'Battery' },
+        { id: 'scenarios' as const, label: 'Scenarios' },
+        { id: 'speed' as const, label: 'Speed' },
     ];
 
     if (!isOpen) return null;
@@ -52,13 +74,13 @@ export default function SystemSettingsModal({ isOpen, onClose }: SystemSettingsM
             <motion.div
                 initial={{ scale: 0.9, y: 20 }}
                 animate={{ scale: 1, y: 0 }}
-                className="bg-darker-blue border-2 border-cyan border-opacity-50 rounded-lg max-w-2xl w-full max-h-screen overflow-y-auto"
+                className="bg-zinc-800/50 border-2 border-sky-500/50 rounded-lg max-w-2xl w-full max-h-screen overflow-y-auto"
             >
                 {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b border-cyan border-opacity-30 bg-deep-blue sticky top-0 z-10">
+                    <div className="flex items-center justify-between p-4 border-b border-sky-500/30 bg-black sticky top-0 z-10">
                     <div className="flex items-center gap-2">
-                        <Settings size={24} className="text-cyan" />
-                        <h2 className="text-xl font-bold font-orbitron text-cyan glow-text">
+                        <Settings size={24} className="text-sky-500" />
+                        <h2 className="text-xl font-bold  text-sky-500 ">
                             SYSTEM CONFIGURATION
                         </h2>
                     </div>
@@ -71,14 +93,14 @@ export default function SystemSettingsModal({ isOpen, onClose }: SystemSettingsM
                 </div>
 
                 {/* Tabs */}
-                <div className="flex gap-2 p-3 border-b border-cyan border-opacity-30 bg-deep-blue sticky top-16 overflow-x-auto">
+                <div className="flex gap-2 p-3 border-b border-sky-500/30 bg-black sticky top-16 overflow-x-auto">
                     {tabs.map((tab) => (
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
                             className={`px-4 py-2 rounded text-sm font-bold whitespace-nowrap transition ${activeTab === tab.id
-                                    ? 'bg-cyan text-deep-blue'
-                                    : 'glass-card text-cyan hover:glass-card-hover'
+                                    ? 'bg-sky-600 text-white'
+                                    : 'bg-zinc-900 border border-zinc-800 rounded-lg shadow-lg text-sky-500 hover:bg-zinc-800'
                                 }`}
                         >
                             {tab.label}
@@ -103,27 +125,27 @@ export default function SystemSettingsModal({ isOpen, onClose }: SystemSettingsM
                     {activeTab === 'battery' && (
                         <BatteryConfig config={localConfig} onChange={handleChange} />
                     )}
+                    {activeTab === 'scenarios' && (
+                        <ScenarioConfig />
+                    )}
+                    {activeTab === 'speed' && (
+                        <SpeedConfig config={localConfig} onChange={handleChange} />
+                    )}
                 </div>
 
                 {/* Footer */}
-                <div className="flex gap-3 p-4 border-t border-cyan border-opacity-30 bg-deep-blue sticky bottom-0">
-                    <button
-                        onClick={handleReset}
-                        className="flex items-center gap-2 px-4 py-2 bg-amber bg-opacity-80 hover:bg-opacity-100 text-deep-blue font-bold rounded transition"
-                    >
-                        <RotateCcw size={16} /> Reset to Default
+                <div className="flex gap-3 p-4 border-t border-sky-500/30 bg-black sticky bottom-0">
+                    <button onClick={handleReset}
+                        className="flex items-center gap-2 px-4 py-2 bg-amber-600/80 hover:bg-amber-500 text-zinc-900 font-bold rounded transition">
+                        <RotateCcw size={16} /> Reset
                     </button>
-                    <button
-                        onClick={onClose}
-                        className="flex-1 px-4 py-2 glass-card hover:glass-card-hover text-cyan font-bold rounded transition"
-                    >
+                    <button onClick={onClose}
+                        className="flex-1 px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-lg hover:bg-zinc-800 text-sky-500 font-bold rounded transition">
                         Cancel
                     </button>
-                    <button
-                        onClick={handleSave}
-                        className="flex items-center gap-2 flex-1 px-4 py-2 bg-neon-green bg-opacity-80 hover:bg-opacity-100 text-deep-blue font-bold rounded transition"
-                    >
-                        <Save size={16} /> Save Configuration
+                    <button onClick={handleSave}
+                        className="flex items-center gap-2 flex-1 px-4 py-2 bg-emerald-600/80 hover:bg-emerald-500 text-zinc-900 font-bold rounded transition">
+                        <Save size={16} /> Save
                     </button>
                 </div>
             </motion.div>
@@ -140,7 +162,7 @@ function CityConfig({
 }) {
     return (
         <div className="space-y-4">
-            <h3 className="text-lg font-bold text-cyan glow-text">City/Grid Configuration</h3>
+            <h3 className="text-lg font-bold text-sky-500 ">City/Grid Configuration</h3>
 
             <ConfigInput
                 label="Number of Villages"
@@ -183,7 +205,7 @@ function ChargingConfig({
 }) {
     return (
         <div className="space-y-4">
-            <h3 className="text-lg font-bold text-cyan glow-text">Charging Strategy</h3>
+            <h3 className="text-lg font-bold text-sky-500 ">Charging Strategy</h3>
 
             <ConfigInput
                 label="Daytime Charge Target (%)"
@@ -237,7 +259,7 @@ function SolarConfig({
 }) {
     return (
         <div className="space-y-4">
-            <h3 className="text-lg font-bold text-cyan glow-text">Solar & Weather</h3>
+            <h3 className="text-lg font-bold text-sky-500 ">Solar & Weather</h3>
 
             <ConfigInput
                 label="Peak Solar Irradiance (W/m²)"
@@ -281,7 +303,7 @@ function EMSConfig({
 }) {
     return (
         <div className="space-y-4">
-            <h3 className="text-lg font-bold text-cyan glow-text">Energy Management System</h3>
+            <h3 className="text-lg font-bold text-sky-500 ">Energy Management System</h3>
 
             <ConfigInput
                 label="Critical Threshold (%)"
@@ -335,7 +357,7 @@ function BatteryConfig({
 }) {
     return (
         <div className="space-y-4">
-            <h3 className="text-lg font-bold text-cyan glow-text">Battery Settings</h3>
+            <h3 className="text-lg font-bold text-sky-500 ">Battery Settings</h3>
 
             <ConfigInput
                 label="Max Charge Rate (% per hour)"
@@ -370,6 +392,66 @@ function BatteryConfig({
     );
 }
 
+const SCENARIOS = [
+    { id: 'heatwave', label: 'Heatwave', desc: 'Extreme 45°C temperature', icon: '🔥', color: 'bg-red-600 hover:bg-red-500' },
+    { id: 'cloudcover', label: 'Heavy Clouds', desc: '95% cloud coverage', icon: '☁️', color: 'bg-zinc-600 hover:bg-zinc-500' },
+    { id: 'hospital-surge', label: 'Hospital Surge', desc: '+100kW demand spike', icon: '🏥', color: 'bg-amber-600 hover:bg-amber-500' },
+    { id: 'relay-failure', label: 'Relay Failure', desc: 'Reroute transfers', icon: '⚡', color: 'bg-orange-600 hover:bg-orange-500' },
+    { id: 'blackout', label: 'Blackout', desc: 'One village goes offline', icon: '🕯️', color: 'bg-red-800 hover:bg-red-700' },
+    { id: 'storm', label: 'Storm', desc: '80 km/h wind, 100% clouds', icon: '🌪️', color: 'bg-violet-600 hover:bg-violet-500' },
+];
+
+function ScenarioConfig() {
+    const triggerScenario = async (id: string) => {
+        try {
+            await fetch(`http://localhost:8000/api/scenario/${id}`, { method: 'POST' });
+        } catch {}
+    };
+
+    return (
+        <div className="space-y-4">
+            <h3 className="text-lg font-bold text-sky-500">Trigger Scenarios</h3>
+            <p className="text-xs text-zinc-400">Instantly apply predefined events to test grid response</p>
+            <div className="grid grid-cols-2 gap-3">
+                {SCENARIOS.map((s) => (
+                    <button key={s.id} onClick={() => triggerScenario(s.id)}
+                        className={`${s.color} text-white rounded-lg p-4 text-left transition`}>
+                        <div className="text-lg mb-1">{s.icon}</div>
+                        <div className="text-sm font-bold">{s.label}</div>
+                        <div className="text-[10px] opacity-80 mt-0.5">{s.desc}</div>
+                    </button>
+                ))}
+            </div>
+        </div>
+    );
+}
+
+function SpeedConfig({ config, onChange }: { config: SystemConfig; onChange: (key: keyof SystemConfig, value: any) => void }) {
+    const setSpeed = async (speed: number) => {
+        try {
+            await fetch(`http://localhost:8000/api/control/simulation/speed/${speed}`, { method: 'POST' });
+        } catch {}
+    };
+
+    return (
+        <div className="space-y-4">
+            <h3 className="text-lg font-bold text-sky-500">Simulation Speed</h3>
+            <p className="text-xs text-zinc-400">Control how fast the simulation runs</p>
+            <div className="flex gap-2">
+                {[0.5, 1, 2, 4].map((s) => (
+                    <button key={s} onClick={() => setSpeed(s)}
+                        className={`flex-1 py-3 rounded-lg text-sm font-bold transition ${
+                            s === 1 ? 'bg-sky-600 text-white' : 'bg-zinc-800 text-zinc-300 hover:bg-zinc-700'
+                        }`}>
+                        {s}x
+                    </button>
+                ))}
+            </div>
+            <p className="text-xs text-zinc-500 text-center">Current: Click a speed button to change</p>
+        </div>
+    );
+}
+
 function ConfigInput({
     label,
     value,
@@ -388,10 +470,10 @@ function ConfigInput({
     tooltip?: string;
 }) {
     return (
-        <div className="glass-card p-3 rounded">
+        <div className="bg-zinc-900 border border-zinc-800 rounded-lg shadow-lg p-3 rounded">
             <div className="flex items-center justify-between mb-2">
-                <label className="text-sm font-bold text-cyan">{label}</label>
-                <span className="text-xs bg-deep-blue px-2 py-1 rounded text-neon-green font-mono">
+                <label className="text-sm font-bold text-sky-500">{label}</label>
+                <span className="text-xs bg-black px-2 py-1 rounded text-emerald-500 font-mono">
                     {typeof value === 'number' ? value.toFixed(2) : value}
                 </span>
             </div>
@@ -404,7 +486,7 @@ function ConfigInput({
                 onChange={(e) => onChange(e.target.value)}
                 className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-cyan"
             />
-            <div className="flex justify-between text-xs text-gray-500 mt-1">
+            <div className="flex justify-between text-xs text-zinc-400 mt-1">
                 <span>{min}</span>
                 <span>{tooltip}</span>
                 <span>{max}</span>

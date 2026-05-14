@@ -1,10 +1,13 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useGridStore } from '@/hooks/useGridStore';
 import { ArrowRight, Radio } from 'lucide-react';
 
 export default function TransferLog() {
     const { transfers, alerts } = useGridStore();
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => setMounted(true), []);
 
     // Create combined log of transfers and alerts
     const logs = [
@@ -26,46 +29,46 @@ export default function TransferLog() {
 
     const getLogColor = (type: string, status: string) => {
         if (type === 'TRANSFER') {
-            return status === 'ACTIVE' ? 'text-neon-green' : 'text-gray-500';
+            return status === 'ACTIVE' ? 'text-secondary' : 'text-outline';
         }
         switch (status) {
             case 'CRITICAL':
-                return 'text-critical-red';
+                return 'text-red-500';
             case 'WARNING':
-                return 'text-amber';
+                return 'text-amber-500';
             case 'AI':
-                return 'text-ai-purple';
+                return 'text-violet-500';
             case 'EMS':
-                return 'text-cyan';
+                return 'text-sky-500';
             default:
-                return 'text-gray-400';
+                return 'text-outline';
         }
     };
 
     return (
         <div className="h-full flex flex-col gap-2">
-            <h3 className="text-sm font-bold font-orbitron text-cyan glow-text">
+            <h3 className="text-sm font-bold  text-sky-500 ">
                 LIVE SYSTEM LOG
             </h3>
 
             <div className="flex-1 overflow-y-auto space-y-1">
                 {logs.length === 0 ? (
-                    <p className="text-xs text-gray-500 text-center py-4">Waiting for system events...</p>
+                    <p className="text-xs text-outline text-center py-4">Waiting for system events...</p>
                 ) : (
                     logs.slice(0, 20).map((log, index) => (
                         <div
                             key={`${log.id}-${index}`}
-                            className="text-xs font-mono bg-darker-blue rounded px-2 py-1 border-l-2 border-cyan border-opacity-20"
+                            className="text-xs font-mono bg-zinc-800/50 rounded px-2 py-1 border-l-2 border-cyan border-opacity-20"
                         >
                             <div className="flex gap-2 items-center">
-                                <span className="text-gray-500 flex-shrink-0">
-                                    [{new Date(log.timestamp).toLocaleTimeString()}]
+                                <span className="text-outline flex-shrink-0">
+                                    [{mounted ? new Date(log.timestamp).toLocaleTimeString() : '--:--:--'}]
                                 </span>
 
                                 {log.type === 'TRANSFER' ? (
-                                    <ArrowRight size={12} className="text-neon-green flex-shrink-0" />
+                                    <ArrowRight size={12} className="text-secondary flex-shrink-0" />
                                 ) : (
-                                    <Radio size={12} className="text-ai-purple flex-shrink-0" />
+                                    <Radio size={12} className="text-violet-500 flex-shrink-0" />
                                 )}
 
                                 <span className={`flex-1 ${getLogColor(log.type, log.status)}`}>
@@ -74,7 +77,7 @@ export default function TransferLog() {
 
                                 <span className="text-gray-600 flex-shrink-0">
                                     {log.type === 'TRANSFER' && log.status === 'ACTIVE' && (
-                                        <span className="text-neon-green animate-pulse">●</span>
+                                        <span className="text-secondary animate-pulse">●</span>
                                     )}
                                 </span>
                             </div>

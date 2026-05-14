@@ -5,6 +5,10 @@ from datetime import datetime, timedelta
 import math
 import random
 from enum import Enum
+from app.data.dataset import (
+    sample_demand, sample_temperature, sample_humidity, sample_wind_speed,
+    solar_factor, VILLAGE_NAMES,
+)
 
 class VillageStatus(str, Enum):
     SURPLUS = "SURPLUS"
@@ -16,29 +20,32 @@ class VillageStatus(str, Enum):
 class Village:
     id: str
     name: str
-    soc: float = 50.0  # State of Charge (0-100)
-    solarGeneration: float = 0.0  # kW
-    demand: float = 0.0  # kW
+    soc: float = 50.0
+    solarGeneration: float = 0.0
+    demand: float = 0.0
     status: VillageStatus = VillageStatus.BALANCED
-    temperature: float = 25.0  # Celsius
-    frequency: float = 50.0  # Hz
-    criticalLoad: float = 0.0  # kW
-    standardLoad: float = 0.0  # kW
+    temperature: float = 25.0
+    frequency: float = 50.0
+    criticalLoad: float = 0.0
+    standardLoad: float = 0.0
     x: float = 0.0
     y: float = 0.0
-    maxCapacity: float = 500.0  # kWh battery capacity
-    chargingRate: float = 0.1  # % per update
-    degradation: float = 0.0  # Battery degradation %
+    maxCapacity: float = 500.0
+    chargingRate: float = 0.1
+    degradation: float = 0.0
+    standardShedPercentage: float = 0.0
+    criticalShedPercentage: float = 0.0
+    hospitalDemand: float = 30.0
+    waterPumpDemand: float = 20.0
+    residentialDemand: float = 50.0
+    schoolDemand: float = 25.0
+    emergencySpike: float = 0.0
+    solarPanelCapacity: float = 300.0
     
     def dict(self):
         return {
             **asdict(self),
             "status": self.status.value if isinstance(self.status, VillageStatus) else self.status,
-            "soc": round(self.soc, 2),
-            "solarGeneration": round(self.solarGeneration, 2),
-            "demand": round(self.demand, 2),
-            "temperature": round(self.temperature, 2),
-            "frequency": round(self.frequency, 2),
         }
 
 @dataclass
@@ -66,16 +73,28 @@ class Alert:
     def dict(self):
         return asdict(self)
 
+WEATHER_EFFICIENCY = {
+    "sunny": 1.0,
+    "partly_cloudy": 0.7,
+    "cloudy": 0.4,
+    "rainy": 0.2,
+    "storm": 0.05,
+}
+
+SEASONAL_FACTORS = [0.6, 0.65, 0.75, 0.85, 0.95, 1.0, 1.0, 0.95, 0.85, 0.75, 0.65, 0.6]
+
 @dataclass
 class Weather:
     temperature: float = 25.0
     humidity: float = 65.0
     windSpeed: float = 10.0
-    cloudCover: float = 30.0  # 0-100%
-    irradiance: float = 800.0  # W/m²
+    cloudCover: float = 30.0
+    irradiance: float = 800.0
+    hour: int = 12
+    condition: str = "partly_cloudy"
 
 class SimulationEngine:
-    def __init__(self, num_villages: int = 8):
+    def __init__(self, num_villages: int = 5):
         self.villages: List[Village] = []
         self.transfers: List[Transfer] = []
         self.alerts: List[Alert] = []
@@ -86,117 +105,112 @@ class SimulationEngine:
         self.total_demand = 0.0
         self.grid_stability = 100.0
         self.active_scenarios = {}
+        self.is_paused = True
+        self._transfer_id = 0
+        self._alert_id = 0
         
         self._initialize_villages(num_villages)
     
     def _initialize_villages(self, num_villages: int):
-        """Initialize villages in concentric circles"""
-        hub_count = 3
-        outpost_count = num_villages - hub_count
+        """Initialize villages with realistic values from UCI energy dataset"""
+        num_villages = max(1, num_villages)
+        hour = self.simulation_time.hour
         
-        # Create hubs (inner circle)
-        for i in range(hub_count):
-            angle = (i / hub_count) * math.pi * 2
+        for i in range(num_villages):
+            angle = (i / num_villages) * math.pi * 2
+            hosp = 25 + random.uniform(0, 15)
+            water = 15 + random.uniform(0, 15)
+            resid = 40 + random.uniform(0, 25)
+            school = 15 + random.uniform(0, 20)
+            base_demand = hosp + water + resid + school
+            
             village = Village(
-                id=f"hub-{i}",
-                name=f"Hub-{chr(65 + i)}",
-                x=400 + 100 * math.cos(angle),
-                y=300 + 100 * math.sin(angle),
-                soc=75 + random.uniform(-10, 10),
-                temperature=20 + random.uniform(-5, 10),
-            )
-            self.villages.append(village)
-        
-        # Create outposts (outer circle)
-        for i in range(outpost_count):
-            angle = (i / outpost_count) * math.pi * 2
-            village = Village(
-                id=f"outpost-{i}",
-                name=f"Village-{chr(65 + hub_count + i)}",
-                x=400 + 200 * math.cos(angle),
-                y=300 + 200 * math.sin(angle),
+                id=f"village-{i}",
+                name=VILLAGE_NAMES[i] if i < len(VILLAGE_NAMES) else f"Village-{chr(65 + i)}",
+                x=400 + 150 * math.cos(angle),
+                y=300 + 150 * math.sin(angle),
                 soc=60 + random.uniform(-15, 15),
-                temperature=22 + random.uniform(-5, 15),
+                temperature=sample_temperature(hour),
+                demand=base_demand,
+                criticalLoad=hosp + water,
+                standardLoad=resid + school,
+                hospitalDemand=round(hosp, 1),
+                waterPumpDemand=round(water, 1),
+                residentialDemand=round(resid, 1),
+                schoolDemand=round(school, 1),
+                emergencySpike=0,
+                solarPanelCapacity=250 + random.uniform(0, 150),
             )
             self.villages.append(village)
+
     
     async def update(self):
         """Update simulation state (called every cycle)"""
-        # Update weather
-        self._update_weather()
+        if not self.is_paused:
+            self._update_weather()
+            
+            for village in self.villages:
+                self._update_solar_generation(village)
+                self._update_demand(village)
+                self._update_battery(village)
+                self._update_frequency(village)
+                self._update_status(village)
+            
+            self.transfers.clear()
+            self.simulation_time += timedelta(seconds=2)
+        else:
+            for village in self.villages:
+                self._update_status(village)
         
-        # Update each village
-        for village in self.villages:
-            # Calculate solar generation based on weather
-            self._update_solar_generation(village)
-            
-            # Calculate demand (residential + hospital loads)
-            self._update_demand(village)
-            
-            # Update battery SOC
-            self._update_battery(village)
-            
-            # Update frequency
-            self._update_frequency(village)
-            
-            # Determine status
-            self._update_status(village)
-        
-        # Update grid metrics
         self._calculate_grid_metrics()
-        
-        # Remove completed transfers
-        self.transfers = [t for t in self.transfers if t.status == "ACTIVE"]
-        
-        self.simulation_time += timedelta(seconds=2)
     
     def _update_weather(self):
-        """Simulate weather changes"""
+        """Simulate weather changes using dataset patterns"""
         hour = self.simulation_time.hour
+        month = self.simulation_time.month - 1
+        self.weather.hour = hour
         
-        # Realistic solar irradiance based on time of day
-        if 6 <= hour < 18:
-            peak_irradiance = 1000
-            time_factor = math.sin((hour - 6) / 12 * math.pi)
-            self.weather.irradiance = peak_irradiance * time_factor
-        else:
-            self.weather.irradiance = 0
+        if not hasattr(self, '_weather_change_counter'):
+            self._weather_change_counter = 0
+        self._weather_change_counter += 1
+        if self._weather_change_counter % 30 == 0:
+            conditions = list(WEATHER_EFFICIENCY.keys())
+            weights = [0.4, 0.3, 0.15, 0.1, 0.05]
+            self.weather.condition = random.choices(conditions, weights=weights, k=1)[0]
         
-        # Random cloud cover changes
+        cond_eff = WEATHER_EFFICIENCY.get(self.weather.condition, 0.7)
+        seasonal = SEASONAL_FACTORS[month]
+        base_irradiance = solar_factor(hour) * 1000 * cond_eff * seasonal
+        
+        self.weather.temperature = sample_temperature(hour)
+        self.weather.humidity = sample_humidity(hour)
+        self.weather.windSpeed = sample_wind_speed(hour)
         self.weather.cloudCover = max(0, min(100, self.weather.cloudCover + random.uniform(-2, 2)))
-        
-        # Adjust irradiance based on cloud cover
-        self.weather.irradiance *= (1 - self.weather.cloudCover / 100)
+        self.weather.irradiance = base_irradiance * (1 - self.weather.cloudCover / 100)
     
     def _update_solar_generation(self, village: Village):
-        """Calculate solar generation"""
-        # Base generation on irradiance and cloud cover
-        base_generation = self.weather.irradiance * 0.3  # 0.3 kW per W/m²
-        
-        # Add randomness
-        noise = random.uniform(-10, 10)
-        village.solarGeneration = max(0, base_generation + noise)
+        base_irradiance = self.weather.irradiance
+        generation = (base_irradiance / 1000) * village.solarPanelCapacity
+        noise = random.uniform(-5, 5)
+        village.solarGeneration = max(0, generation + noise)
     
     def _update_demand(self, village: Village):
-        """Calculate village demand"""
         hour = self.simulation_time.hour
+        is_school_hour = 7 <= hour <= 16
+        is_night = hour <= 5 or hour >= 22
         
-        # Base demand varies by hour
-        if 0 <= hour < 6:
-            base_demand = 80  # Night time, low demand
-        elif 6 <= hour < 12:
-            base_demand = 150  # Morning, increasing
-        elif 12 <= hour < 18:
-            base_demand = 200  # Afternoon, peak
-        else:
-            base_demand = 120  # Evening
+        hosp = village.hospitalDemand * (1.0 if not is_night else 0.8)
+        water = village.waterPumpDemand * (1.0 if not is_night else 0.5)
+        resid = village.residentialDemand * (0.6 if is_night else (1.2 if 18 <= hour <= 22 else 1.0))
+        school = village.schoolDemand if is_school_hour else 0
         
-        # Split into critical and standard loads
-        village.criticalLoad = base_demand * 0.4  # 40% critical (hospital, etc.)
-        village.standardLoad = base_demand * 0.6  # 60% standard (residential)
+        noise = random.uniform(-3, 3)
+        base_critical = hosp + water
+        base_standard = resid + school
         
-        # Add randomness
-        village.demand = base_demand + random.uniform(-20, 20)
+        village.criticalLoad = base_critical * (1 - village.criticalShedPercentage / 100)
+        village.standardLoad = base_standard * (1 - village.standardShedPercentage / 100)
+        village.demand = village.criticalLoad + village.standardLoad + village.emergencySpike + noise
     
     def _update_battery(self, village: Village):
         """Update battery state of charge"""
@@ -235,98 +249,75 @@ class SimulationEngine:
         self.total_generation = sum(v.solarGeneration for v in self.villages) / 1000  # Convert to MW
         self.total_demand = sum(v.demand for v in self.villages) / 1000  # Convert to MW
         
-        # Grid stability based on frequency and balance
-        avg_frequency = sum(v.frequency for v in self.villages) / len(self.villages)
+        avg_frequency = sum(v.frequency for v in self.villages) / len(self.villages) if self.villages else 50.0
         frequency_deviation = abs(50.0 - avg_frequency)
-        balance_ratio = min(1.0, self.total_generation / max(self.total_demand, 0.1))
         
-        self.grid_stability = 100 * (1 - frequency_deviation / 2) * balance_ratio
+        # Consider battery discharge capacity for stability when solar is low
+        total_battery_power_mw = sum((v.soc / 100) * v.maxCapacity * 0.2 for v in self.villages) / 1000
+        available_power = self.total_generation + total_battery_power_mw
+        
+        balance_ratio = min(1.0, available_power / max(self.total_demand, 0.1))
+        
+        self.grid_stability = 100 * (1 - frequency_deviation / 5) * balance_ratio
         self.grid_stability = max(0, min(100, self.grid_stability))
     
-    async def create_transfer(self, source_id: str, destination_id: str, rate: float):
+    async def create_transfer(self, source_id: str, destination_id: str, rate: float, note: Optional[str] = None):
         """Create a power transfer between two villages"""
         transfer = Transfer(
-            id=f"transfer-{len(self.transfers)}",
+            id=f"transfer-{self._transfer_id}",
             source=source_id,
             destination=destination_id,
             rate=rate,
-            efficiency=96.4,  # Transmission efficiency
+            efficiency=96.4,
         )
+        self._transfer_id += 1
         self.transfers.append(transfer)
         
-        # Create alert
+        message = f"Transfer initiated: {source_id} \u2192 {destination_id} ({rate:.1f} kW)"
+        if note:
+            message += f" - {note}"
+            
         alert = Alert(
-            id=f"alert-{len(self.alerts)}",
+            id=f"alert-{self._alert_id}",
             type="EMS",
-            message=f"Transfer initiated: {source_id} → {destination_id} ({rate:.1f} kW)",
+            message=message,
             severity=1,
         )
+        self._alert_id += 1
         self.alerts.append(alert)
     
     async def trigger_scenario(self, scenario_id: str):
         """Trigger a test scenario"""
+        alert = None
         if scenario_id == "heatwave":
             self.weather.temperature = 45
-            alert = Alert(
-                id=f"alert-{len(self.alerts)}",
-                type="CRITICAL",
-                message="Heatwave alert: Extreme temperature detected",
-                severity=3,
-            )
-            self.alerts.append(alert)
+            alert = Alert(id=f"alert-{self._alert_id}", type="CRITICAL", message="Heatwave alert: Extreme temperature detected", severity=3)
         
         elif scenario_id == "cloudcover":
             self.weather.cloudCover = 95
-            alert = Alert(
-                id=f"alert-{len(self.alerts)}",
-                type="WARNING",
-                message="Heavy cloud cover: Solar generation reduced",
-                severity=2,
-            )
-            self.alerts.append(alert)
+            alert = Alert(id=f"alert-{self._alert_id}", type="WARNING", message="Heavy cloud cover: Solar generation reduced", severity=2)
         
         elif scenario_id == "hospital-surge":
-            # Increase demand for a hospital node
             hospital = self.villages[0] if self.villages else None
             if hospital:
                 hospital.demand += 100
-                alert = Alert(
-                    id=f"alert-{len(self.alerts)}",
-                    type="CRITICAL",
-                    message=f"Hospital surge: Demand increased at {hospital.name}",
-                    severity=3,
-                )
-                self.alerts.append(alert)
+                alert = Alert(id=f"alert-{self._alert_id}", type="CRITICAL", message=f"Hospital surge: Demand increased at {hospital.name}", severity=3)
         
         elif scenario_id == "relay-failure":
-            alert = Alert(
-                id=f"alert-{len(self.alerts)}",
-                type="CRITICAL",
-                message="Relay R-014 failed: Rerouting power transfers",
-                severity=3,
-            )
-            self.alerts.append(alert)
+            alert = Alert(id=f"alert-{self._alert_id}", type="CRITICAL", message="Relay R-014 failed: Rerouting power transfers", severity=3)
         
         elif scenario_id == "blackout":
             if self.villages:
                 affected_village = random.choice(self.villages)
                 affected_village.solarGeneration = 0
                 affected_village.soc = 0
-                alert = Alert(
-                    id=f"alert-{len(self.alerts)}",
-                    type="CRITICAL",
-                    message=f"Blackout: {affected_village.name} is offline",
-                    severity=3,
-                )
-                self.alerts.append(alert)
+                alert = Alert(id=f"alert-{self._alert_id}", type="CRITICAL", message=f"Blackout: {affected_village.name} is offline", severity=3)
         
         elif scenario_id == "storm":
             self.weather.windSpeed = 80
             self.weather.cloudCover = 100
-            alert = Alert(
-                id=f"alert-{len(self.alerts)}",
-                type="WARNING",
-                message="Storm warning: Extreme weather conditions incoming",
-                severity=2,
-            )
+            alert = Alert(id=f"alert-{self._alert_id}", type="WARNING", message="Storm warning: Extreme weather conditions incoming", severity=2)
+        
+        if alert:
+            self._alert_id += 1
             self.alerts.append(alert)

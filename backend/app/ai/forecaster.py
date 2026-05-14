@@ -13,7 +13,7 @@ class Forecaster:
     
     def __init__(self, model_path: str = None):
         self.model = None
-        self.model_path = model_path or "lstm_model.h5"
+        self.model_path = model_path or os.path.join(os.path.dirname(__file__), "../../../lstm_model.h5")
         
         try:
             if _HAS_TF and os.path.exists(self.model_path):
@@ -46,7 +46,8 @@ class Forecaster:
         return forecasts
     
     async def _model_predict(self, villages: List[Village], hour_offset: int) -> Dict:
-        """Use LSTM model for prediction"""
+        if not villages:
+            return {"demand": 0, "generation": 0, "confidence": 0.92, "timestamp": 0}
         try:
             # Prepare input features
             # In a real system, this would include historical data
@@ -82,29 +83,22 @@ class Forecaster:
             return self._heuristic_predict(villages, None, hour_offset)
     
     def _heuristic_predict(self, villages: List[Village], weather: Weather, hour_offset: int) -> Dict:
-        """Heuristic-based prediction (no model)"""
+        if not villages:
+            return {"demand": 0, "generation": 0, "confidence": 0.85, "timestamp": 0}
         
-        # Average current state
         avg_demand = np.mean([v.demand for v in villages])
         avg_generation = np.mean([v.solarGeneration for v in villages])
-        avg_soc = np.mean([v.soc for v in villages])
-        
-        # Simple trend-based forecast
-        # Morning peak: increase demand
-        # Afternoon peak: high generation but increasing demand
-        # Evening: decreasing generation, increasing demand
         
         forecast_demand = avg_demand
         forecast_generation = avg_generation
         
-        # Adjust based on time of day (assuming current hour is in simulation)
-        if 10 <= hour_offset <= 14:
-            forecast_generation *= 1.1  # Peak solar hours
-        elif 16 <= hour_offset <= 20:
-            forecast_demand *= 1.15  # Evening peak
-            forecast_generation *= 0.6  # Sunset
+        actual_hour = (weather.hour + hour_offset) % 24
+        if 10 <= actual_hour <= 14:
+            forecast_generation *= 1.1
+        elif 16 <= actual_hour <= 20:
+            forecast_demand *= 1.15
+            forecast_generation *= 0.6
         
-        # Add randomness for realism
         forecast_demand *= np.random.uniform(0.9, 1.1)
         forecast_generation *= np.random.uniform(0.9, 1.1)
         
