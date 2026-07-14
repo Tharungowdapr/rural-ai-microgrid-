@@ -7,9 +7,18 @@ export default defineConfig({
       '@': path.resolve(__dirname, 'src'),
     },
   },
+  esbuild: {
+    jsx: 'automatic',
+  },
   test: {
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/__tests__/setup.ts'],
+    server: {
+      deps: {
+        inline: [/zustand/],
+        fallbackCJS: true,
+      },
+    },
   },
 });
