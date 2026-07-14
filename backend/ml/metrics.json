@@ -1,0 +1,34 @@
+{
+  "mae": 28.3192,
+  "rmse": 59.4878,
+  "mape": 27.1159,
+  "train_size": 15711,
+  "test_size": 3928,
+  "seq_length": 96,
+  "n_features": 13,
+  "features": [
+    "Appliances",
+    "T1",
+    "RH_1",
+    "T2",
+    "RH_2",
+    "T3",
+    "RH_3",
+    "T4",
+    "T_out",
+    "Press_mm_hg",
+    "RH_out",
+    "Windspeed",
+    "Tdewpoint"
+  ],
+  "epochs_trained": 14,
+  "best_val_loss": 0.003215,
+  "trained_at": "2026-07-14T20:08:14.171608",
+  "baselines": {
+    "naive_persistence": {
+      "mae": 26.2134,
+      "rmse": 65.7433,
+      "mape": 21.8767
+    }
+  }
+}
