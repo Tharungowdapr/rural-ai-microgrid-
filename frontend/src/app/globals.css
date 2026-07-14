@@ -23,6 +23,29 @@
   }
 }
 
+/* Leaflet map overrides for dark theme */
+.leaflet-container {
+  background: #121212 !important;
+  font-family: inherit;
+}
+.leaflet-control-zoom a {
+  background: #1a1a1a !important;
+  color: #e5e5e5 !important;
+  border-color: #333 !important;
+}
+.leaflet-popup-content-wrapper {
+  background: #1a1a1a !important;
+  color: #e5e5e5 !important;
+  border-radius: 8px !important;
+  border: 1px solid #333 !important;
+}
+.leaflet-popup-tip {
+  background: #1a1a1a !important;
+}
+.leaflet-popup-close-button {
+  color: #999 !important;
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;

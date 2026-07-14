@@ -1,361 +1,177 @@
 'use client';
 
 import { useGridStore, Village } from '@/hooks/useGridStore';
-import { useMemo } from 'react';
-import { TransformWrapper, TransformComponent } from 'react-zoom-pan-pinch';
+import { useEffect, useMemo, useState } from 'react';
+import dynamic from 'next/dynamic';
 
-const VIEW_BOX_W = 1400;
-const VIEW_BOX_H = 750;
-const PAD = 120;
+const MapContainer = dynamic(() => import('react-leaflet/MapContainer').then(m => m.default), { ssr: false });
+const TileLayer = dynamic(() => import('react-leaflet/TileLayer').then(m => m.default), { ssr: false });
+const Marker = dynamic(() => import('react-leaflet/Marker').then(m => m.default), { ssr: false });
+const Popup = dynamic(() => import('react-leaflet/Popup').then(m => m.default), { ssr: false });
+const Polyline = dynamic(() => import('react-leaflet/Polyline').then(m => m.default), { ssr: false });
 
-function computeLayout(villages: Village[]): Village[] {
-    const n = villages.length;
-    if (n === 0) return [];
+const STATUS_COLORS: Record<string, string> = {
+    SURPLUS: '#00ff41',
+    BALANCED: '#00d4ff',
+    WARNING: '#ffa500',
+    DEFICIT: '#ff0040',
+};
 
-    // Generate target positions that spread across the viewBox
-    let targets: { x: number; y: number }[];
-    if (n === 1) {
-        targets = [{ x: VIEW_BOX_W / 2, y: VIEW_BOX_H / 2 }];
-    } else if (n === 2) {
-        targets = [
-            { x: VIEW_BOX_W * 0.25, y: VIEW_BOX_H / 2 },
-            { x: VIEW_BOX_W * 0.75, y: VIEW_BOX_H / 2 },
-        ];
-    } else if (n === 3) {
-        targets = [
-            { x: VIEW_BOX_W * 0.15, y: VIEW_BOX_H * 0.8 },
-            { x: VIEW_BOX_W * 0.5, y: VIEW_BOX_H * 0.15 },
-            { x: VIEW_BOX_W * 0.85, y: VIEW_BOX_H * 0.8 },
-        ];
-    } else if (n === 4) {
-        targets = [
-            { x: VIEW_BOX_W * 0.2, y: VIEW_BOX_H * 0.2 },
-            { x: VIEW_BOX_W * 0.8, y: VIEW_BOX_H * 0.2 },
-            { x: VIEW_BOX_W * 0.2, y: VIEW_BOX_H * 0.8 },
-            { x: VIEW_BOX_W * 0.8, y: VIEW_BOX_H * 0.8 },
-        ];
-    } else {
-        targets = Array.from({ length: n }, (_, i) => {
-            const angle = (i / n) * Math.PI * 2 - Math.PI / 2;
-            const rx = VIEW_BOX_W / 2 - PAD;
-            const ry = VIEW_BOX_H / 2 - PAD;
-            return {
-                x: VIEW_BOX_W / 2 + rx * Math.cos(angle),
-                y: VIEW_BOX_H / 2 + ry * Math.sin(angle),
-            };
-        });
-    }
+function getStatusColor(status: string): string {
+    return STATUS_COLORS[status] || '#00d4ff';
+}
 
-    return villages.map((v, i) => ({
-        ...v,
-        x: targets[i].x,
-        y: targets[i].y,
-    }));
+function VillageMarker({ village, onClick }: { village: Village; onClick?: (v: Village) => void }) {
+    return (
+        <Marker
+            position={[village.lat, village.lng]}
+            eventHandlers={{ click: () => onClick?.(village) }}
+            icon={typeof window !== 'undefined' ? (window as any).L?.divIcon?.({
+                className: '',
+                html: `
+                    <div style="
+                        position: relative;
+                        width: 44px; height: 44px;
+                        background: rgba(0,0,0,0.7);
+                        border: 2px solid ${getStatusColor(village.status)};
+                        border-radius: 50%;
+                        display: flex; align-items: center; justify-content: center;
+                        box-shadow: 0 0 12px ${getStatusColor(village.status)}80;
+                        cursor: pointer;
+                    ">
+                        <span style="color: #fff; font-size: 11px; font-weight: bold; font-family: monospace;">
+                            ${Math.round(village.soc)}%
+                        </span>
+                    </div>
+                `,
+                iconSize: [44, 44],
+                iconAnchor: [22, 22],
+            }) : undefined}
+        >
+            <Popup>
+                <div style={{ fontFamily: 'sans-serif', fontSize: 12, minWidth: 160 }}>
+                    <strong style={{ fontSize: 14 }}>{village.name}</strong>
+                    <div style={{ color: getStatusColor(village.status), fontWeight: 'bold' }}>
+                        {village.status}
+                    </div>
+                    <hr style={{ margin: '4px 0' }} />
+                    <div>SOC: {village.soc.toFixed(1)}%</div>
+                    <div>Solar: {village.solarGeneration.toFixed(0)} kW</div>
+                    <div>Demand: {village.demand.toFixed(0)} kW</div>
+                    <div>Temp: {Math.round(village.temperature)}°C</div>
+                </div>
+            </Popup>
+        </Marker>
+    );
+}
+
+function StatusLegend() {
+    const entries = [
+        { label: 'SURPLUS', color: '#00ff41' },
+        { label: 'BALANCED', color: '#00d4ff' },
+        { label: 'WARNING', color: '#ffa500' },
+        { label: 'DEFICIT', color: '#ff0040' },
+    ];
+
+    return (
+        <div className="absolute bottom-4 left-4 z-[1000] bg-zinc-900/90 backdrop-blur-md border border-zinc-700/50 rounded-lg p-2 pointer-events-none">
+            <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-wider mb-1">Status</p>
+            {entries.map(e => (
+                <div key={e.label} className="flex items-center gap-2 text-[10px] text-zinc-300 mb-0.5">
+                    <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: e.color }} />
+                    {e.label}
+                </div>
+            ))}
+        </div>
+    );
 }
 
 export default function Topology({ onCityClick }: { onCityClick?: (village: Village) => void }) {
     const { villages, transfers } = useGridStore();
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => setMounted(true), []);
 
-    const villagePositions = useMemo(() => {
-        if (villages.length === 0) {
-            const demo: Village[] = Array.from({ length: 5 }, (_, i) => {
-                const angle = (i / 5) * Math.PI * 2 - Math.PI / 2;
-                const rx = VIEW_BOX_W / 2 - PAD;
-                const ry = VIEW_BOX_H / 2 - PAD;
-                const statuses = ['SURPLUS', 'BALANCED', 'WARNING', 'DEFICIT'] as const;
-                return {
-                    id: `village-${i}`,
-                    name: `Village-${String.fromCharCode(65 + i)}`,
-                    soc: 50 + (i * 10),
-                    solarGeneration: 150 + (i * 20),
-                    demand: 100 + (i * 15),
-                    status: statuses[i % 4],
-                    temperature: 25 + i,
-                    frequency: 50 + (i * 0.05),
-                    criticalLoad: 40 + (i * 8),
-                    standardLoad: 80 + (i * 15),
-                    x: VIEW_BOX_W / 2 + rx * Math.cos(angle),
-                    y: VIEW_BOX_H / 2 + ry * Math.sin(angle),
-                    maxCapacity: 500, chargingRate: 0.1, degradation: 0,
-                    standardShedPercentage: 0, criticalShedPercentage: 0,
-                    hospitalDemand: 30, waterPumpDemand: 20,
-                    residentialDemand: 50, schoolDemand: 25,
-                    emergencySpike: 0, solarPanelCapacity: 300,
-                };
-            });
-            return demo;
+    const center = useMemo<[number, number]>(() => {
+        if (villages.length > 0) {
+            const avgLat = villages.reduce((s, v) => s + v.lat, 0) / villages.length;
+            const avgLng = villages.reduce((s, v) => s + v.lng, 0) / villages.length;
+            return [avgLat, avgLng];
         }
-        return computeLayout(villages);
+        return [23.2599, 77.4126]; // Default: Bhopal area
     }, [villages]);
 
-    const getStatusColor = (status: string) => {
-        switch (status) {
-            case 'SURPLUS':
-                return '#00ff41';
-            case 'BALANCED':
-                return '#00d4ff';
-            case 'WARNING':
-                return '#ffa500';
-            case 'DEFICIT':
-                return '#ff0040';
-            default:
-                return '#00d4ff';
-        }
-    };
+    const transferLines = useMemo(() => {
+        return transfers.map(t => {
+            const src = villages.find(v => v.id === t.source);
+            const dst = villages.find(v => v.id === t.destination);
+            if (!src || !dst) return null;
+            return {
+                key: t.id,
+                positions: [[src.lat, src.lng], [dst.lat, dst.lng]] as [number, number][],
+            };
+        }).filter(Boolean);
+    }, [transfers, villages]);
 
-    const getNodeGlow = (status: string) => {
-        switch (status) {
-            case 'SURPLUS':
-                return 'filter-green';
-            case 'BALANCED':
-                return 'filter-cyan';
-            case 'WARNING':
-                return 'filter-amber';
-            case 'DEFICIT':
-                return 'filter-red';
-            default:
-                return 'filter-cyan';
-        }
-    };
+    if (!mounted) {
+        return (
+            <div className="w-full h-full flex items-center justify-center bg-zinc-900">
+                <div className="text-center">
+                    <div className="w-8 h-8 border-2 border-sky-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                    <p className="text-sm text-zinc-400">Loading map...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (villages.length === 0) {
+        return (
+            <div className="w-full h-full flex items-center justify-center bg-zinc-900">
+                <div className="text-center">
+                    <div className="w-10 h-10 border-2 border-sky-500 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                    <p className="text-sm font-bold text-zinc-300">Connecting to grid...</p>
+                    <p className="text-xs text-zinc-500 mt-1">Waiting for village data from the backend</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
-        <div 
-            className="w-full h-full flex items-center justify-center rounded-lg overflow-hidden relative"
-            style={{
-                backgroundImage: "url('/dark_map_bg.png')",
-                backgroundSize: "cover",
-                backgroundPosition: "center"
-            }}
-        >
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-[2px]"></div>
-            <div className="absolute top-4 left-4 pointer-events-none z-10">
-                <p className="text-zinc-400 text-sm font-semibold">Energy Mesh Network</p>
-                <p className="text-zinc-400 text-xs">Drag to pan, scroll to zoom. Click nodes to configure.</p>
+        <div className="w-full h-full relative">
+            <MapContainer
+                center={center}
+                zoom={11}
+                style={{ width: '100%', height: '100%' }}
+                zoomControl={false}
+                attributionControl={false}
+            >
+                <TileLayer
+                    url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+                />
+
+                {transferLines.map(line => line && (
+                    <Polyline
+                        key={line.key}
+                        positions={line.positions}
+                        pathOptions={{
+                            color: '#10b981',
+                            weight: 3,
+                            dashArray: '10, 8',
+                            opacity: 0.8,
+                        }}
+                    />
+                ))}
+
+                {villages.map(village => (
+                    <VillageMarker key={village.id} village={village} onClick={onCityClick} />
+                ))}
+            </MapContainer>
+
+            <div className="absolute top-3 left-12 z-[1000] pointer-events-none">
+                <p className="text-zinc-400 text-sm font-semibold">Network Topology (schematic)</p>
+                <p className="text-zinc-500 text-xs">Click a village node to configure</p>
             </div>
 
-            <TransformWrapper
-                initialScale={1}
-                minScale={0.5}
-                maxScale={4}
-                centerOnInit={true}
-                wheel={{ step: 0.1 }}
-            >
-                <TransformComponent wrapperClass="w-full h-full" contentClass="w-full h-full">
-                    <svg
-                        width="100%"
-                        height="100%"
-                        viewBox={`0 0 ${VIEW_BOX_W} ${VIEW_BOX_H}`}
-                        preserveAspectRatio="xMidYMid meet"
-                        className="w-full h-full"
-                    >
-                        <defs>
-                            {/* Gradient for energy lines */}
-                            <linearGradient id="energyGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-                                <stop offset="0%" stopColor="#00d4ff" stopOpacity="0.8" />
-                                <stop offset="100%" stopColor="#00ff41" stopOpacity="0.8" />
-                            </linearGradient>
-
-                            {/* Glow filters */}
-                            <filter id="glow-green">
-                                <feGaussianBlur stdDeviation="3" result="coloredBlur" />
-                                <feMerge>
-                                    <feMergeNode in="coloredBlur" />
-                                    <feMergeNode in="SourceGraphic" />
-                                </feMerge>
-                            </filter>
-                            <filter id="glow-cyan">
-                                <feGaussianBlur stdDeviation="3" result="coloredBlur" />
-                                <feMerge>
-                                    <feMergeNode in="coloredBlur" />
-                                    <feMergeNode in="SourceGraphic" />
-                                </feMerge>
-                            </filter>
-                        </defs>
-
-                        {/* Static grid mesh & Background pulses */}
-                        {villagePositions.map((v1, i) => {
-                            return villagePositions.slice(i + 1).map((v2, j) => {
-                                const dist = Math.sqrt(Math.pow(v1.x - v2.x, 2) + Math.pow(v1.y - v2.y, 2));
-                                if (dist < 350) {
-                                    return (
-                                        <g key={`mesh-${i}-${j}`}>
-                                            <line
-                                                x1={v1.x}
-                                                y1={v1.y}
-                                                x2={v2.x}
-                                                y2={v2.y}
-                                                stroke="#0ea5e9"
-                                                strokeWidth="1"
-                                                opacity="0.2"
-                                            />
-                                            {/* Ambient network pulse */}
-                                            <circle r="2" fill="#0ea5e9" opacity="0.5">
-                                                <animateMotion
-                                                    path={`M ${v1.x} ${v1.y} L ${v2.x} ${v2.y}`}
-                                                    dur={`${2 + (i+j)*0.5}s`}
-                                                    repeatCount="indefinite"
-                                                />
-                                            </circle>
-                                            <circle r="2" fill="#0ea5e9" opacity="0.5">
-                                                <animateMotion
-                                                    path={`M ${v2.x} ${v2.y} L ${v1.x} ${v1.y}`}
-                                                    dur={`${2.5 + (i+j)*0.3}s`}
-                                                    repeatCount="indefinite"
-                                                />
-                                            </circle>
-                                        </g>
-                                    );
-                                }
-                                return null;
-                            });
-                        })}
-
-                        {/* Active power transfers with heavy animation */}
-                        {transfers.map((transfer) => {
-                            const source = villagePositions.find((v) => v.id === transfer.source);
-                            const dest = villagePositions.find((v) => v.id === transfer.destination);
-                            if (!source || !dest) return null;
-
-                            return (
-                                <g key={transfer.id}>
-                                    <line
-                                        x1={source.x}
-                                        y1={source.y}
-                                        x2={dest.x}
-                                        y2={dest.y}
-                                        stroke="#10b981"
-                                        strokeWidth="4"
-                                        strokeDasharray="15,10"
-                                        opacity="0.8"
-                                        className="drop-shadow-[0_0_8px_rgba(16,185,129,0.8)]"
-                                    >
-                                        <animate
-                                            attributeName="stroke-dashoffset"
-                                            from="200"
-                                            to="0"
-                                            dur="1.5s"
-                                            repeatCount="indefinite"
-                                        />
-                                    </line>
-                                    
-                                    {/* Directional energy packet */}
-                                    <circle
-                                        r="6"
-                                        fill="#fff"
-                                        className="drop-shadow-[0_0_10px_rgba(255,255,255,1)]"
-                                    >
-                                        <animateMotion
-                                            path={`M ${source.x} ${source.y} L ${dest.x} ${dest.y}`}
-                                            dur="1.2s"
-                                            repeatCount="indefinite"
-                                        />
-                                    </circle>
-                                </g>
-                            );
-                        })}
-
-                        {/* Villages as nodes */}
-                        {villagePositions.map((village) => (
-                            <g 
-                                key={village.id} 
-                                onClick={(e) => { e.stopPropagation(); onCityClick && onCityClick(village); }}
-                                className="cursor-pointer hover:opacity-80 transition-opacity"
-                            >
-                                {/* Household/Non-Critical Layer (Outer Ring) */}
-                                <circle
-                                    cx={village.x}
-                                    cy={village.y}
-                                    r="45"
-                                    fill="rgba(255,255,255,0.03)"
-                                    stroke={getStatusColor(village.status)}
-                                    strokeWidth="1.5"
-                                    strokeDasharray="4 4"
-                                    opacity="0.6"
-                                />
-                                <text
-                                    x={village.x}
-                                    y={village.y - 52}
-                                    textAnchor="middle"
-                                    fill="#94a3b8"
-                                    fontSize="9"
-                                    fontWeight="bold"
-                                    opacity="0.8"
-                                >
-                                    HOUSEHOLD
-                                </text>
-
-                                {/* Critical Layer (Inner Core) */}
-                                <circle
-                                    cx={village.x}
-                                    cy={village.y}
-                                    r="28"
-                                    fill="rgba(0,0,0,0.5)"
-                                    stroke={getStatusColor(village.status)}
-                                    strokeWidth="2"
-                                    opacity="0.9"
-                                />
-                                <circle
-                                    cx={village.x}
-                                    cy={village.y}
-                                    r="26"
-                                    fill={getStatusColor(village.status)}
-                                    opacity="0.15"
-                                />
-                                <text
-                                    x={village.x}
-                                    y={village.y + 38}
-                                    textAnchor="middle"
-                                    fill="#f8fafc"
-                                    fontSize="9"
-                                    fontWeight="bold"
-                                    opacity="0.9"
-                                >
-                                    CRITICAL
-                                </text>
-
-                                {/* Battery percentage text inside core */}
-                                <text
-                                    x={village.x}
-                                    y={village.y}
-                                    textAnchor="middle"
-                                    dominantBaseline="middle"
-                                    fill="#fff"
-                                    fontSize="14"
-                                    fontWeight="bold"
-                                    fontFamily="monospace"
-                                >
-                                    {Math.round(village.soc)}%
-                                </text>
-
-                                {/* Village label */}
-                                <text
-                                    x={village.x}
-                                    y={village.y + 60}
-                                    textAnchor="middle"
-                                    dominantBaseline="middle"
-                                    fill="#f1f5f9"
-                                    fontSize="13"
-                                    fontWeight="bold"
-                                    fontFamily="inter"
-                                    opacity="1"
-                                    className="drop-shadow-md"
-                                >
-                                    {village.name}
-                                </text>
-
-                                {/* Status indicator */}
-                                <circle
-                                    cx={village.x + 35}
-                                    cy={village.y - 35}
-                                    r="4"
-                                    fill={getStatusColor(village.status)}
-                                    opacity="0.8"
-                                />
-                            </g>
-                        ))}
-                    </svg>
-                </TransformComponent>
-            </TransformWrapper>
+            <StatusLegend />
         </div>
     );
 }

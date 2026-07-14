@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { useGridStore } from '@/hooks/useGridStore';
-import { Activity, Zap, TrendingUp, Brain, Shuffle, Play, Pause } from 'lucide-react';
+import { useWebSocket } from '@/hooks/useWebSocket';
+import { Activity, Zap, TrendingUp, Brain, Shuffle, Play, Pause, Wifi, WifiOff } from 'lucide-react';
 
 export default function Header() {
     const {
@@ -10,6 +11,7 @@ export default function Header() {
         villages, simulationRunning, updateForecasts, setAIInsights,
         setSimulationRunning, initializeVillages, setMetrics,
     } = useGridStore();
+    const { connectionStatus } = useWebSocket();
     const [predictLoading, setPredictLoading] = useState(false);
 
     const getHealthStatus = () => {
@@ -27,8 +29,9 @@ export default function Header() {
             const data = await res.json();
             if (Array.isArray(data) && data.length > 0) {
                 updateForecasts(data);
+                const source = data[0].source || 'unknown';
                 setAIInsights([
-                    { type: 'info', title: 'Forecast Complete', content: `6-hour prediction loaded (conf: ${(data[0].confidence * 100).toFixed(0)}%)`, severity: 1 },
+                    { type: 'info', title: 'Forecast Complete', content: `${source === 'model' ? 'LSTM model' : 'Heuristic'}: 6-hour prediction loaded (conf: ${(data[0].confidence * 100).toFixed(0)}%)`, severity: 1 },
                     { type: 'trend', title: 'Demand Trend', content: data[0].demand > data[data.length - 1].demand ? 'Demand rising — prepare for peak' : 'Demand stable', severity: 2 },
                 ]);
             }
@@ -87,6 +90,18 @@ export default function Header() {
                         <div className={`w-2 h-2 rounded-full animate-pulse ${simulationRunning ? 'bg-emerald-500' : 'bg-zinc-500'}`} />
                         <span className="text-xs font-semibold text-zinc-200 tracking-wide uppercase">
                             {simulationRunning ? 'Live' : 'Paused'}
+                        </span>
+                    </div>
+
+                    {/* Connection status */}
+                    <div className={`flex items-center gap-1.5 bg-zinc-800/80 rounded-full px-3 py-1.5 ${
+                        connectionStatus === 'connected' ? 'text-emerald-400' :
+                        connectionStatus === 'connecting' ? 'text-amber-400' : 'text-red-400'
+                    }`}>
+                        {connectionStatus === 'connected' ? <Wifi size={14} /> : <WifiOff size={14} />}
+                        <span className="text-xs font-semibold tracking-wide uppercase">
+                            {connectionStatus === 'connected' ? 'Online' :
+                             connectionStatus === 'connecting' ? 'Connecting...' : 'Offline'}
                         </span>
                     </div>
 

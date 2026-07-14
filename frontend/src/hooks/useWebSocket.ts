@@ -1,12 +1,16 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { useGridStore, Village } from './useGridStore';
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:8000/ws';
-const RECONNECT_DELAY = 3000;
+const INITIAL_RECONNECT_DELAY = 1000;
+const MAX_RECONNECT_DELAY = 30000;
 
 export const useWebSocket = () => {
     const wsRef = useRef<WebSocket | null>(null);
     const reconnectRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const reconnectDelayRef = useRef(INITIAL_RECONNECT_DELAY);
+    const [connectionStatus, setConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected'>('disconnected');
+    const [lastError, setLastError] = useState<string | null>(null);
     const {
         updateVillage,
         setTransfers,
@@ -22,11 +26,14 @@ export const useWebSocket = () => {
 
     useEffect(() => {
         const connectWebSocket = () => {
+            setConnectionStatus('connecting');
             try {
                 wsRef.current = new WebSocket(WS_URL);
 
                 wsRef.current.onopen = () => {
                     console.log('WebSocket connected');
+                    setConnectionStatus('connected');
+                    reconnectDelayRef.current = INITIAL_RECONNECT_DELAY;
                 };
 
                 wsRef.current.onmessage = (event) => {
@@ -81,16 +88,36 @@ export const useWebSocket = () => {
                             initializeVillages(data.villages);
                             if (data.paused !== undefined) setSimulationRunning(!data.paused);
                             break;
+
+                        case 'ERROR':
+                            console.error('Server error:', data.message);
+                            setLastError(data.message);
+                            addAlert({
+                                id: `error-${Date.now()}`,
+                                type: 'CRITICAL',
+                                message: data.message,
+                                timestamp: Date.now(),
+                                severity: 3,
+                            });
+                            break;
                     }
                 };
 
-                wsRef.current.onerror = () => {};
+                wsRef.current.onerror = () => {
+                    console.error('WebSocket error');
+                };
 
                 wsRef.current.onclose = () => {
-                    reconnectRef.current = setTimeout(connectWebSocket, RECONNECT_DELAY);
+                    setConnectionStatus('disconnected');
+                    const delay = reconnectDelayRef.current;
+                    reconnectDelayRef.current = Math.min(delay * 2, MAX_RECONNECT_DELAY);
+                    console.log(`WebSocket closed, reconnecting in ${delay}ms`);
+                    reconnectRef.current = setTimeout(connectWebSocket, delay);
                 };
             } catch {
-                reconnectRef.current = setTimeout(connectWebSocket, RECONNECT_DELAY);
+                const delay = reconnectDelayRef.current;
+                reconnectDelayRef.current = Math.min(delay * 2, MAX_RECONNECT_DELAY);
+                reconnectRef.current = setTimeout(connectWebSocket, delay);
             }
         };
 
@@ -98,7 +125,10 @@ export const useWebSocket = () => {
 
         return () => {
             if (reconnectRef.current) clearTimeout(reconnectRef.current);
-            if (wsRef.current) wsRef.current.close();
+            if (wsRef.current) {
+                wsRef.current.onclose = null;
+                wsRef.current.close();
+            }
         };
     }, [updateVillage, addTransfer, removeTransfer, addAlert, updateForecasts, setAIInsights, setMetrics, initializeVillages]);
 
@@ -108,5 +138,5 @@ export const useWebSocket = () => {
         }
     }, []);
 
-    return { send };
+    return { send, connectionStatus, lastError };
 };
