@@ -1,36 +1,45 @@
-from fastapi import APIRouter, HTTPException
-from typing import Optional
-from pydantic import BaseModel
-from app.dependencies import simulation_engine, ems_controller, forecaster
-from app.simulation.engine import Alert
+"""REST API routes for the Rural Microgrid simulation."""
+
+import logging
 import random
-import time
+from typing import Optional
+
+from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel, Field
+
+from app.dependencies import ems_controller, forecaster, simulation_engine
+from app.simulation.engine import Alert
+
+logger = logging.getLogger(__name__)
+
+
+# ---------- Request models with validation ----------
 
 
 class WeatherUpdate(BaseModel):
-    temperature: Optional[float] = None
-    humidity: Optional[float] = None
-    windSpeed: Optional[float] = None
-    cloudCover: Optional[float] = None
-    irradiance: Optional[float] = None
-    dayTimeHour: Optional[int] = None
+    temperature: Optional[float] = Field(None, ge=-50, le=60)
+    humidity: Optional[float] = Field(None, ge=0, le=100)
+    windSpeed: Optional[float] = Field(None, ge=0, le=200)
+    cloudCover: Optional[float] = Field(None, ge=0, le=100)
+    irradiance: Optional[float] = Field(None, ge=0, le=1500)
+    dayTimeHour: Optional[int] = Field(None, ge=0, le=23)
     condition: Optional[str] = None
 
 
 class VillageUpdate(BaseModel):
-    soc: Optional[float] = None
-    demand: Optional[float] = None
-    solarGeneration: Optional[float] = None
-    criticalLoad: Optional[float] = None
-    standardLoad: Optional[float] = None
-    hospitalDemand: Optional[float] = None
-    waterPumpDemand: Optional[float] = None
-    residentialDemand: Optional[float] = None
-    schoolDemand: Optional[float] = None
-    emergencySpike: Optional[float] = None
-    solarPanelCapacity: Optional[float] = None
-    chargingRate: Optional[float] = None
-    temperature: Optional[float] = None
+    soc: Optional[float] = Field(None, ge=0, le=100)
+    demand: Optional[float] = Field(None, ge=0)
+    solarGeneration: Optional[float] = Field(None, ge=0)
+    criticalLoad: Optional[float] = Field(None, ge=0)
+    standardLoad: Optional[float] = Field(None, ge=0)
+    hospitalDemand: Optional[float] = Field(None, ge=0)
+    waterPumpDemand: Optional[float] = Field(None, ge=0)
+    residentialDemand: Optional[float] = Field(None, ge=0)
+    schoolDemand: Optional[float] = Field(None, ge=0)
+    emergencySpike: Optional[float] = Field(None, ge=0)
+    solarPanelCapacity: Optional[float] = Field(None, ge=0)
+    chargingRate: Optional[float] = Field(None, ge=0, le=1)
+    temperature: Optional[float] = Field(None, ge=-50, le=60)
 
 
 router = APIRouter(prefix="/api", tags=["api"])
@@ -63,7 +72,7 @@ async def get_alerts():
 async def get_forecast():
     forecasts = await forecaster.predict(
         simulation_engine.villages,
-        simulation_engine.weather
+        simulation_engine.weather,
     )
     return forecasts
 
@@ -71,8 +80,12 @@ async def get_forecast():
 @router.post("/scenario/{scenario_id}")
 async def trigger_scenario(scenario_id: str):
     valid_scenarios = [
-        "heatwave", "cloudcover", "relay-failure",
-        "hospital-surge", "blackout", "storm",
+        "heatwave",
+        "cloudcover",
+        "relay-failure",
+        "hospital-surge",
+        "blackout",
+        "storm",
     ]
     if scenario_id not in valid_scenarios:
         raise HTTPException(status_code=400, detail=f"Invalid scenario: {scenario_id}")
@@ -124,16 +137,16 @@ async def randomize_simulation():
         v.solarPanelCapacity = round(random.uniform(200, 400), 1)
         v.temperature = round(random.uniform(5, 35), 1)
         v.chargingRate = round(random.uniform(0.05, 0.2), 2)
-    
+
     simulation_engine.weather.condition = random.choice(conditions)
     simulation_engine.weather.cloudCover = round(random.uniform(0, 100), 1)
     simulation_engine.weather.temperature = round(random.uniform(5, 35), 1)
     simulation_engine.weather.humidity = round(random.uniform(30, 95), 1)
     simulation_engine.weather.windSpeed = round(random.uniform(0, 15), 1)
-    
+
     hour = random.randint(0, 23)
     simulation_engine.simulation_time = simulation_engine.simulation_time.replace(hour=hour)
-    
+
     return {"status": "randomized"}
 
 
@@ -206,20 +219,27 @@ async def update_village_params(village_id: str, village_update: VillageUpdate):
     village = next((v for v in simulation_engine.villages if v.id == village_id), None)
     if not village:
         raise HTTPException(status_code=404, detail="Village not found")
-    
+
     fields = {
-        "soc": "soc", "demand": "demand", "solarGeneration": "solarGeneration",
-        "criticalLoad": "criticalLoad", "standardLoad": "standardLoad",
-        "hospitalDemand": "hospitalDemand", "waterPumpDemand": "waterPumpDemand",
-        "residentialDemand": "residentialDemand", "schoolDemand": "schoolDemand",
-        "emergencySpike": "emergencySpike", "solarPanelCapacity": "solarPanelCapacity",
-        "chargingRate": "chargingRate", "temperature": "temperature",
+        "soc": "soc",
+        "demand": "demand",
+        "solarGeneration": "solarGeneration",
+        "criticalLoad": "criticalLoad",
+        "standardLoad": "standardLoad",
+        "hospitalDemand": "hospitalDemand",
+        "waterPumpDemand": "waterPumpDemand",
+        "residentialDemand": "residentialDemand",
+        "schoolDemand": "schoolDemand",
+        "emergencySpike": "emergencySpike",
+        "solarPanelCapacity": "solarPanelCapacity",
+        "chargingRate": "chargingRate",
+        "temperature": "temperature",
     }
     for field, attr in fields.items():
         val = getattr(village_update, field, None)
         if val is not None:
             setattr(village, attr, val)
-    
+
     return village.dict()
 
 
@@ -243,3 +263,44 @@ async def update_infrastructure(
     if school is not None:
         village.schoolDemand = max(0, school)
     return village.dict()
+
+
+@router.get("/history/{village_id}")
+async def get_history(village_id: str, hours: int = 24):
+    """Return rolling window of demand/generation/SOC for LSTM input."""
+    from app.db import get_db, get_history
+
+    db = next(get_db())
+    try:
+        rows = get_history(db, village_id, hours)
+        return [
+            {
+                "village_id": r.village_id,
+                "timestamp": r.timestamp.isoformat() if r.timestamp else None,
+                "demand": r.demand,
+                "solar_generation": r.solar_generation,
+                "soc": r.soc,
+                "temperature": r.temperature,
+                "humidity": r.humidity,
+                "wind_speed": r.wind_speed,
+                "cloud_cover": r.cloud_cover,
+            }
+            for r in rows
+        ]
+    finally:
+        db.close()
+
+
+@router.get("/metrics/model")
+async def get_model_metrics():
+    """Return current model training metrics (MAE/RMSE/MAPE)."""
+    import json
+    from pathlib import Path
+
+    from app.config import settings
+
+    metrics_path = Path(settings.METRICS_PATH)
+    if metrics_path.exists():
+        with open(metrics_path) as f:
+            return json.load(f)
+    return {"error": "No metrics available — model not trained yet"}

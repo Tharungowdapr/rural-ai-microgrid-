@@ -29,3 +29,15 @@ logs/
 *.egg-info/
 dist/
 build/
+
+# Testing
+.pytest_cache/
+coverage/
+htmlcov/
+*.cover
+
+# Database
+*.db
+
+# ML artifacts (large binaries — tracked intentionally: lstm_model.h5)
+# scaler.joblib and metrics.json are small and tracked

@@ -12,3 +12,10 @@ sqlalchemy
 python-jose[cryptography]
 python-dotenv
 tensorflow
+joblib
+httpx
+pytest
+pytest-asyncio
+ruff
+black
+isort
