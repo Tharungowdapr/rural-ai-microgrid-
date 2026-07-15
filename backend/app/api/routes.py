@@ -42,12 +42,68 @@ class VillageUpdate(BaseModel):
     temperature: Optional[float] = Field(None, ge=-50, le=60)
 
 
+class VillageCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=40)
+    lat: float = Field(..., ge=0, le=90)
+    lng: float = Field(..., ge=-180, le=180)
+    soc: float = Field(50.0, ge=0, le=100)
+    solarPanelCapacity: float = Field(300.0, ge=0, le=2000)
+    maxCapacity: float = Field(500.0, ge=50, le=5000)
+    chargingRate: float = Field(0.1, ge=0, le=1)
+    hospitalDemand: float = Field(30.0, ge=0)
+    waterPumpDemand: float = Field(20.0, ge=0)
+    residentialDemand: float = Field(50.0, ge=0)
+    schoolDemand: float = Field(25.0, ge=0)
+    emergencySpike: float = Field(0.0, ge=0)
+    temperature: float = Field(28.0, ge=-50, le=60)
+
+
 router = APIRouter(prefix="/api", tags=["api"])
 
 
 @router.get("/villages")
 async def get_villages():
     return [v.dict() for v in simulation_engine.villages]
+
+
+@router.post("/villages")
+async def create_village(body: VillageCreate):
+    """Add a new village at a specific lat/lng with full parameter control."""
+    from app.simulation.engine import Village, VillageStatus
+
+    idx = len(simulation_engine.villages)
+    base_demand = body.hospitalDemand + body.waterPumpDemand + body.residentialDemand + body.schoolDemand
+    critical = body.hospitalDemand + body.waterPumpDemand
+    standard = body.residentialDemand + body.schoolDemand
+
+    village = Village(
+        id=f"village-{idx}",
+        name=body.name,
+        soc=body.soc,
+        solarGeneration=0,
+        demand=base_demand,
+        status=VillageStatus.BALANCED,
+        temperature=body.temperature,
+        frequency=50.0,
+        criticalLoad=critical,
+        standardLoad=standard,
+        x=400 + 100 * (idx % 4),
+        y=200 + 100 * (idx // 4),
+        maxCapacity=body.maxCapacity,
+        chargingRate=body.chargingRate,
+        degradation=0,
+        hospitalDemand=body.hospitalDemand,
+        waterPumpDemand=body.waterPumpDemand,
+        residentialDemand=body.residentialDemand,
+        schoolDemand=body.schoolDemand,
+        emergencySpike=body.emergencySpike,
+        solarPanelCapacity=body.solarPanelCapacity,
+        lat=body.lat,
+        lng=body.lng,
+    )
+    simulation_engine.villages.append(village)
+    logger.info("Created village %s at (%.4f, %.4f)", village.name, village.lat, village.lng)
+    return village.dict()
 
 
 @router.get("/villages/{village_id}")
@@ -243,6 +299,17 @@ async def update_village_params(village_id: str, village_update: VillageUpdate):
     return village.dict()
 
 
+@router.delete("/villages/{village_id}")
+async def delete_village(village_id: str):
+    """Remove a village from the microgrid."""
+    idx = next((i for i, v in enumerate(simulation_engine.villages) if v.id == village_id), None)
+    if idx is None:
+        raise HTTPException(status_code=404, detail="Village not found")
+    removed = simulation_engine.villages.pop(idx)
+    logger.info("Deleted village %s", removed.name)
+    return {"status": "deleted", "village_id": village_id, "villages": [v.dict() for v in simulation_engine.villages]}
+
+
 @router.post("/village/{village_id}/infrastructure")
 async def update_infrastructure(
     village_id: str,
@@ -304,3 +371,69 @@ async def get_model_metrics():
         with open(metrics_path) as f:
             return json.load(f)
     return {"error": "No metrics available — model not trained yet"}
+
+
+class VillageCountUpdate(BaseModel):
+    count: int = Field(..., ge=1, le=20)
+
+
+@router.post("/villages/count")
+async def set_village_count(update: VillageCountUpdate):
+    """Reconfigure the microgrid with a different number of villages."""
+    target = update.count
+    current = len(simulation_engine.villages)
+
+    if target == current:
+        return {"count": current, "status": "unchanged"}
+
+    if target > current:
+        import math
+        import random as _rand
+        from app.data.dataset import VILLAGE_NAMES, sample_temperature, sample_humidity
+
+        existing = set(v.id for v in simulation_engine.villages)
+        hour = simulation_engine.simulation_time.hour
+        total = target
+
+        for i in range(current, target):
+            angle = (i / total) * math.pi * 2
+            hosp = 25 + _rand.uniform(0, 15)
+            water = 15 + _rand.uniform(0, 15)
+            resid = 40 + _rand.uniform(0, 25)
+            school = 15 + _rand.uniform(0, 20)
+
+            from app.simulation.engine import Village, VillageStatus
+            from app.simulation.engine import VILLAGE_COORDS
+
+            lat, lng = VILLAGE_COORDS[i] if i < len(VILLAGE_COORDS) else (
+                23.26 + _rand.uniform(-0.3, 0.3),
+                77.41 + _rand.uniform(-0.3, 0.3),
+            )
+
+            village = Village(
+                id=f"village-{i}",
+                name=VILLAGE_NAMES[i] if i < len(VILLAGE_NAMES) else f"Village-{i}",
+                x=400 + 150 * math.cos(angle),
+                y=300 + 150 * math.sin(angle),
+                soc=60 + _rand.uniform(-15, 15),
+                temperature=sample_temperature(hour),
+                demand=hosp + water + resid + school,
+                criticalLoad=hosp + water,
+                standardLoad=resid + school,
+                hospitalDemand=round(hosp, 1),
+                waterPumpDemand=round(water, 1),
+                residentialDemand=round(resid, 1),
+                schoolDemand=round(school, 1),
+                solarPanelCapacity=250 + _rand.uniform(0, 150),
+                lat=lat,
+                lng=lng,
+            )
+            simulation_engine.villages.append(village)
+    else:
+        simulation_engine.villages = simulation_engine.villages[:target]
+
+    return {
+        "count": len(simulation_engine.villages),
+        "status": "updated",
+        "villages": [v.dict() for v in simulation_engine.villages],
+    }

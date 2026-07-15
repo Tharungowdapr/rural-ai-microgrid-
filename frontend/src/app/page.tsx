@@ -1,72 +1,47 @@
 'use client';
 
-import { useState } from 'react';
-import Header from '@/components/Header';
 import dynamic from 'next/dynamic';
-import AIPanel from '@/components/AIPanel';
-import TransferLog from '@/components/TransferLog';
-import WeatherPanel from '@/components/WeatherPanel';
-import AlertCenter from '@/components/AlertCenter';
-import VillageBar from '@/components/VillageBar';
-import CityControlModal from '@/components/CityControlModal';
-import { useGridStore, Village } from '@/hooks/useGridStore';
-import { Settings } from 'lucide-react';
-import SystemSettings from '@/components/SystemSettings';
+import { useGridStore } from '@/hooks/useGridStore';
 
 const Topology = dynamic(() => import('@/components/Topology'), { ssr: false });
 
-export default function Dashboard() {
-    const [selectedVillage, setSelectedVillage] = useState<Village | null>(null);
-    const [showSettings, setShowSettings] = useState(false);
+export default function DashboardPage() {
+    const { villages, transfers, totalGeneration, totalDemand, gridStability } = useGridStore();
+
+    const surplusCount = villages.filter(v => v.status === 'SURPLUS').length;
+    const deficitCount = villages.filter(v => v.status === 'DEFICIT').length;
+    const warningCount = villages.filter(v => v.status === 'WARNING').length;
+    const balancedCount = villages.filter(v => v.status === 'BALANCED').length;
 
     return (
-        <div className="w-screen h-screen overflow-hidden bg-[#121212] relative font-roboto text-on-surface">
-
-            <div className="absolute inset-0 z-0 pointer-events-auto">
-                <Topology onCityClick={(village) => setSelectedVillage(village)} />
+        <div className="h-full flex flex-col gap-4">
+            <div className="flex items-center gap-3">
+                <h2 className="text-xl font-bold text-zinc-100">Network Dashboard</h2>
+                <span className="text-xs text-zinc-500">Real-time topology view</span>
             </div>
 
-            <div className="absolute inset-0 z-30 pointer-events-none p-3 flex flex-col">
-
-                <div className="w-full flex-none pointer-events-auto bg-zinc-900/70 backdrop-blur-md border border-zinc-800/50 rounded-xl">
-                    <Header />
-                </div>
-
-                <div className="flex-1 relative">
-                    <div className="absolute left-0 top-0 bottom-0 w-[220px] flex flex-col gap-3 pointer-events-auto overflow-y-auto">
-                        <div className="bg-zinc-900/60 backdrop-blur-md border border-zinc-800/50 rounded-xl p-3">
-                            <AlertCenter />
-                        </div>
-                        <div className="flex-1 bg-zinc-900/60 backdrop-blur-md border border-zinc-800/50 rounded-xl p-3 min-h-[150px]">
-                            <TransferLog />
-                        </div>
+            <div className="flex gap-3">
+                {[
+                    { label: 'Total Villages', value: villages.length, color: 'text-zinc-200' },
+                    { label: 'Gen', value: `${(totalGeneration * 1000).toFixed(0)} kW`, color: 'text-emerald-400' },
+                    { label: 'Load', value: `${(totalDemand * 1000).toFixed(0)} kW`, color: 'text-red-400' },
+                    { label: 'Stability', value: `${gridStability.toFixed(1)}%`, color: gridStability > 95 ? 'text-emerald-400' : gridStability > 80 ? 'text-amber-400' : 'text-red-400' },
+                    { label: 'Surplus', value: surplusCount, color: 'text-emerald-400' },
+                    { label: 'Balanced', value: balancedCount, color: 'text-sky-400' },
+                    { label: 'Warning', value: warningCount, color: 'text-amber-400' },
+                    { label: 'Deficit', value: deficitCount, color: 'text-red-400' },
+                    { label: 'Transfers', value: transfers.filter(t => t.status === 'ACTIVE').length, color: 'text-violet-400' },
+                ].map(item => (
+                    <div key={item.label} className="glass-card px-4 py-2.5 min-w-[100px]">
+                        <p className="text-[10px] text-zinc-500 uppercase tracking-wide">{item.label}</p>
+                        <p className={`text-lg font-bold font-mono ${item.color}`}>{item.value}</p>
                     </div>
-
-                    <div className="absolute right-0 top-0 bottom-0 w-[220px] flex flex-col gap-3 pointer-events-auto overflow-y-auto">
-                        <div className="flex-1 bg-zinc-900/60 backdrop-blur-md border border-zinc-800/50 rounded-xl p-3">
-                            <AIPanel />
-                        </div>
-                        <div className="bg-zinc-900/60 backdrop-blur-md border border-zinc-800/50 rounded-xl p-3">
-                            <WeatherPanel />
-                        </div>
-                    </div>
-                </div>
-
-                <div className="w-full flex-none pointer-events-auto bg-zinc-900/60 backdrop-blur-md border border-zinc-800/50 rounded-xl px-3 py-2">
-                    <VillageBar />
-                </div>
+                ))}
             </div>
 
-            <button
-                onClick={() => setShowSettings(true)}
-                className="absolute bottom-20 left-1/2 -translate-x-1/2 z-40 px-4 py-2 bg-zinc-800/80 hover:bg-zinc-700 backdrop-blur-md border border-zinc-700/50 rounded-full flex items-center gap-2 text-zinc-300 pointer-events-auto transition"
-            >
-                <Settings size={16} />
-                <span className="text-xs font-bold tracking-widest uppercase">System Settings</span>
-            </button>
-
-            <SystemSettings isOpen={showSettings} onClose={() => setShowSettings(false)} />
-            <CityControlModal village={selectedVillage} onClose={() => setSelectedVillage(null)} />
+            <div className="flex-1 rounded-xl overflow-hidden border border-white/5">
+                <Topology />
+            </div>
         </div>
     );
 }

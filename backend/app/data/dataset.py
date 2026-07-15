@@ -52,7 +52,12 @@ HOURLY_SOLAR_FACTOR = [
     0.05, 0.0, 0.0, 0.0, 0.0, 0.0,
 ]
 
-VILLAGE_NAMES = ["Village-A", "Village-B", "Village-C", "Village-D", "Village-E"]
+VILLAGE_NAMES = [
+    "Barkheda", "Raisen", "Mandideep", "Obaidullaganj", "Sanchi",
+    "Begumganj", "Narsinghgarh", "Rajnandgaon", "Biaora", "Nasrullaganj",
+    "Sultanpur", "Bhaurasa", "Pipalpani", "Goharganj", "Basoda",
+    "Garhi", "Shahpura", "Udaipura", "Baraily", "Mandla",
+]
 
 
 def clamp(value, lo, hi):

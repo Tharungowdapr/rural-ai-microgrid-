@@ -1,13 +1,14 @@
 import type { Metadata } from "next";
 import { Roboto_Flex, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import AppShell from "@/components/AppShell";
 
 const robotoFlex = Roboto_Flex({ subsets: ["latin"], variable: "--font-roboto-flex" });
 const jetbrainsMono = JetBrains_Mono({ subsets: ["latin"], variable: "--font-jetbrains-mono" });
 
 export const metadata: Metadata = {
-  title: "Digital Twin Engine",
-  description: "High-density real-time digital twin simulations.",
+  title: "Rural Microgrid Digital Twin",
+  description: "Real-time rural microgrid simulation with LSTM-powered AI forecasting.",
 };
 
 export default function RootLayout({
@@ -16,9 +17,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${robotoFlex.variable} ${jetbrainsMono.variable} font-roboto bg-background text-on-surface antialiased overflow-hidden`}>
-        {children}
+    <html lang="en" className="dark">
+      <body className={`${robotoFlex.variable} ${jetbrainsMono.variable} font-roboto`}>
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   );

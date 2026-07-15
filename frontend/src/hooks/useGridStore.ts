@@ -24,6 +24,8 @@ export interface Village {
     schoolDemand: number;
     emergencySpike: number;
     solarPanelCapacity: number;
+    lat: number;
+    lng: number;
 }
 
 export interface Transfer {
@@ -102,11 +104,11 @@ interface GridState {
 }
 
 const DEMO_VILLAGES: Village[] = [
-    { id: "village-0", name: "Village-A", soc: 72, solarGeneration: 245, demand: 134, status: "SURPLUS", temperature: 28, frequency: 50.1, criticalLoad: 54, standardLoad: 80, x: 150, y: 480, maxCapacity: 500, chargingRate: 0.1, degradation: 0, standardShedPercentage: 0, criticalShedPercentage: 0, hospitalDemand: 32, waterPumpDemand: 22, residentialDemand: 55, schoolDemand: 25, emergencySpike: 0, solarPanelCapacity: 320, },
-    { id: "village-1", name: "Village-B", soc: 48, solarGeneration: 218, demand: 196, status: "WARNING", temperature: 26, frequency: 49.8, criticalLoad: 78, standardLoad: 118, x: 500, y: 80, maxCapacity: 500, chargingRate: 0.1, degradation: 0, standardShedPercentage: 0, criticalShedPercentage: 0, hospitalDemand: 35, waterPumpDemand: 25, residentialDemand: 65, schoolDemand: 30, emergencySpike: 0, solarPanelCapacity: 300, },
-    { id: "village-2", name: "Village-C", soc: 85, solarGeneration: 280, demand: 110, status: "SURPLUS", temperature: 30, frequency: 50.2, criticalLoad: 44, standardLoad: 66, x: 850, y: 480, maxCapacity: 500, chargingRate: 0.1, degradation: 0, standardShedPercentage: 0, criticalShedPercentage: 0, hospitalDemand: 28, waterPumpDemand: 18, residentialDemand: 42, schoolDemand: 22, emergencySpike: 0, solarPanelCapacity: 360, },
-    { id: "village-3", name: "Village-D", soc: 35, solarGeneration: 190, demand: 210, status: "DEFICIT", temperature: 27, frequency: 49.5, criticalLoad: 84, standardLoad: 126, x: 350, y: 280, maxCapacity: 500, chargingRate: 0.1, degradation: 0, standardShedPercentage: 50, criticalShedPercentage: 0, hospitalDemand: 38, waterPumpDemand: 22, residentialDemand: 70, schoolDemand: 28, emergencySpike: 0, solarPanelCapacity: 280, },
-    { id: "village-4", name: "Village-E", soc: 62, solarGeneration: 230, demand: 155, status: "BALANCED", temperature: 29, frequency: 50.0, criticalLoad: 62, standardLoad: 93, x: 650, y: 300, maxCapacity: 500, chargingRate: 0.1, degradation: 0, standardShedPercentage: 0, criticalShedPercentage: 0, hospitalDemand: 30, waterPumpDemand: 20, residentialDemand: 55, schoolDemand: 25, emergencySpike: 0, solarPanelCapacity: 310, },
+    { id: "village-0", name: "Barkheda", soc: 72, solarGeneration: 245, demand: 134, status: "SURPLUS", temperature: 28, frequency: 50.1, criticalLoad: 54, standardLoad: 80, x: 150, y: 480, maxCapacity: 500, chargingRate: 0.1, degradation: 0, standardShedPercentage: 0, criticalShedPercentage: 0, hospitalDemand: 32, waterPumpDemand: 22, residentialDemand: 55, schoolDemand: 25, emergencySpike: 0, solarPanelCapacity: 320, lat: 23.1100, lng: 77.5600 },
+    { id: "village-1", name: "Raisen", soc: 48, solarGeneration: 218, demand: 196, status: "WARNING", temperature: 26, frequency: 49.8, criticalLoad: 78, standardLoad: 118, x: 500, y: 80, maxCapacity: 500, chargingRate: 0.1, degradation: 0, standardShedPercentage: 0, criticalShedPercentage: 0, hospitalDemand: 35, waterPumpDemand: 25, residentialDemand: 65, schoolDemand: 30, emergencySpike: 0, solarPanelCapacity: 300, lat: 23.3300, lng: 77.5900 },
+    { id: "village-2", name: "Mandideep", soc: 85, solarGeneration: 280, demand: 110, status: "SURPLUS", temperature: 30, frequency: 50.2, criticalLoad: 44, standardLoad: 66, x: 850, y: 480, maxCapacity: 500, chargingRate: 0.1, degradation: 0, standardShedPercentage: 0, criticalShedPercentage: 0, hospitalDemand: 28, waterPumpDemand: 18, residentialDemand: 42, schoolDemand: 22, emergencySpike: 0, solarPanelCapacity: 360, lat: 23.1800, lng: 77.4600 },
+    { id: "village-3", name: "Sanchi", soc: 35, solarGeneration: 190, demand: 210, status: "DEFICIT", temperature: 27, frequency: 49.5, criticalLoad: 84, standardLoad: 126, x: 350, y: 280, maxCapacity: 500, chargingRate: 0.1, degradation: 0, standardShedPercentage: 50, criticalShedPercentage: 0, hospitalDemand: 38, waterPumpDemand: 22, residentialDemand: 70, schoolDemand: 28, emergencySpike: 0, solarPanelCapacity: 280, lat: 23.4800, lng: 77.7400 },
+    { id: "village-4", name: "Narsinghgarh", soc: 62, solarGeneration: 230, demand: 155, status: "BALANCED", temperature: 29, frequency: 50.0, criticalLoad: 62, standardLoad: 93, x: 650, y: 300, maxCapacity: 500, chargingRate: 0.1, degradation: 0, standardShedPercentage: 0, criticalShedPercentage: 0, hospitalDemand: 30, waterPumpDemand: 20, residentialDemand: 55, schoolDemand: 25, emergencySpike: 0, solarPanelCapacity: 310, lat: 23.4500, lng: 77.1000 },
 ];
 
 const DEMO_TRANSFERS: Transfer[] = [

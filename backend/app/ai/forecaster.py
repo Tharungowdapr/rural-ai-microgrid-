@@ -34,9 +34,9 @@ except ImportError:
     _HAS_JOBLIB = False
 
 # Feature list matching training pipeline (UCI Appliances Energy Prediction)
-FEATURE_LIST = ["Appliances", "Temperature", "Humidity", "Pressure", "Windspeed", "Visibility", "Dewpoint"]
-SEQ_LENGTH = 24  # lookback window (hours)
-N_FEATURES = len(FEATURE_LIST)
+FEATURE_LIST = ["Appliances", "T1", "RH_1", "T2", "RH_2", "T3", "RH_3", "T4", "T_out", "Press_mm_hg", "RH_out", "Windspeed", "Tdewpoint"]
+SEQ_LENGTH = 96  # lookback window (hours) - matches training
+N_FEATURES = len(FEATURE_LIST)  # 13 features
 
 
 class Forecaster:
@@ -64,7 +64,7 @@ class Forecaster:
             logger.warning("Model file not found at %s — using heuristic path", self.model_path)
             return
         try:
-            self.model = tf.keras.models.load_model(self.model_path)
+            self.model = tf.keras.models.load_model(self.model_path, compile=False)
             self._model_input_shape = tuple(self.model.input_shape)
             logger.info("Loaded LSTM model from %s (input shape: %s)", self.model_path, self._model_input_shape)
         except Exception as exc:
@@ -111,18 +111,34 @@ class Forecaster:
             return {"demand": 0, "generation": 0, "confidence": 0.5, "source": "heuristic", "timestamp": 0}
 
         # Build feature vector from current village state + weather
-        # Matches training features: Appliances, Temperature, Humidity, Pressure, Windspeed, Visibility, Dewpoint
+        # Matches training features: Appliances, T1, RH_1, T2, RH_2, T3, RH_3, T4, T_out, Press_mm_hg, RH_out, Windspeed, Tdewpoint
         avg_demand = float(np.mean([v.demand for v in villages]))
         avg_generation = float(np.mean([v.solarGeneration for v in villages]))
 
+        temp = weather.temperature if weather else 25.0
+        humidity = weather.humidity if weather else 65.0
+        wind = weather.windSpeed if weather else 5.0
+
+        # Use values within training distribution to avoid out-of-bounds predictions
+        # Training ranges: T1~16-26, RH_1~27-63, T2~16-30, RH_2~20-56, T3~17-29, RH_3~28-50, T4~15-26
+        # T_out~-5-26, Press_mm_hg~729-772, RH_out~24-100, Windspeed~0-14, Tdewpoint~-6.6-15.5
+        press_mmhg = 750.0  # within training range [729, 772]
+        t_dewpoint = max(-6.0, min(15.0, temp - 5.0))  # clamp to training range
+
         features = np.array([[
-            avg_demand,                       # Appliances proxy
-            weather.temperature if weather else 25.0,
-            weather.humidity if weather else 65.0,
-            1013.0,                            # Pressure (standard atm)
-            weather.windSpeed if weather else 5.0,
-            10.0,                              # Visibility (km, typical clear)
-            weather.temperature - 5.0,         # Dewpoint approximation
+            avg_demand,                   # Appliances proxy
+            temp + 2,                     # T1 (kitchen)
+            humidity - 5,                 # RH_1
+            temp,                         # T2 (living room)
+            humidity,                     # RH_2
+            temp - 1,                     # T3 (laundry)
+            humidity + 3,                 # RH_3
+            temp + 1,                     # T4 (office)
+            temp,                         # T_out
+            press_mmhg,                   # Press_mm_hg (within training range)
+            humidity,                     # RH_out
+            wind,                         # Windspeed
+            t_dewpoint,                   # Tdewpoint (clamped)
         ]])
 
         # Scale with the saved scaler

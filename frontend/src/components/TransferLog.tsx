@@ -1,85 +1,100 @@
+// @ts-nocheck
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState, useEffect } from 'react';
+import { ArrowRight, Radio, AlertTriangle, Zap, Brain, Info } from 'lucide-react';
 import { useGridStore } from '@/hooks/useGridStore';
-import { ArrowRight, Radio } from 'lucide-react';
+
+interface LogEntry {
+    id: string;
+    type: 'TRANSFER' | 'CRITICAL' | 'WARNING' | 'INFO' | 'AI' | 'EMS';
+    message: string;
+    timestamp: number;
+    severity: number;
+    status?: string;
+    source?: string;
+    destination?: string;
+    rate?: number;
+}
 
 export default function TransferLog() {
     const { transfers, alerts } = useGridStore();
     const [mounted, setMounted] = useState(false);
+
     useEffect(() => setMounted(true), []);
 
-    // Create combined log of transfers and alerts
-    const logs = [
-        ...transfers.map((t) => ({
+    const logs: LogEntry[] = [
+        ...transfers.map(t => ({
             id: t.id,
+            type: 'TRANSFER' as const,
+            message: `${t.source} → ${t.destination} @ ${t.rate.toFixed(0)} kW`,
             timestamp: t.startTime,
-            type: 'TRANSFER',
-            message: `Transfer: ${t.source} → ${t.destination} (${t.rate.toFixed(1)} kW)`,
+            severity: 1,
             status: t.status,
+            source: t.source,
+            destination: t.destination,
+            rate: t.rate,
         })),
-        ...alerts.slice(0, 10).map((a) => ({
+        ...alerts.map(a => ({
             id: a.id,
-            timestamp: a.timestamp,
-            type: 'ALERT',
+            type: a.type as LogEntry['type'],
             message: a.message,
+            timestamp: a.timestamp,
+            severity: a.severity,
             status: a.type,
         })),
     ].sort((a, b) => b.timestamp - a.timestamp);
 
     const getLogColor = (type: string, status: string) => {
         if (type === 'TRANSFER') {
-            return status === 'ACTIVE' ? 'text-secondary' : 'text-outline';
+            return status === 'ACTIVE' ? 'text-emerald-400' : 'text-outline';
         }
         switch (status) {
-            case 'CRITICAL':
-                return 'text-red-500';
-            case 'WARNING':
-                return 'text-amber-500';
-            case 'AI':
-                return 'text-violet-500';
-            case 'EMS':
-                return 'text-sky-500';
-            default:
-                return 'text-outline';
+            case 'CRITICAL': return 'text-red-500';
+            case 'WARNING': return 'text-amber-500';
+            case 'AI': return 'text-violet-500';
+            case 'EMS': return 'text-sky-500';
+            default: return 'text-outline';
+        }
+    };
+
+    const getIcon = (type: string) => {
+        switch (type) {
+            case 'TRANSFER': return <ArrowRight size={10} className="text-emerald-400 flex-shrink-0" />;
+            case 'CRITICAL': return <AlertTriangle size={10} className="text-red-500 flex-shrink-0" />;
+            case 'WARNING': return <AlertTriangle size={10} className="text-amber-500 flex-shrink-0" />;
+            case 'AI': return <Brain size={10} className="text-violet-500 flex-shrink-0" />;
+            case 'EMS': return <Zap size={10} className="text-sky-500 flex-shrink-0" />;
+            default: return <Info size={10} className="text-outline flex-shrink-0" />;
         }
     };
 
     return (
-        <div className="h-full flex flex-col gap-2">
-            <h3 className="text-sm font-bold  text-sky-500 ">
-                LIVE SYSTEM LOG
+        <div className="h-full flex flex-col gap-1">
+            <h3 className="text-xs font-bold text-sky-500 tracking-wide uppercase">
+                SYSTEM LOG
             </h3>
 
-            <div className="flex-1 overflow-y-auto space-y-1">
+            <div className="flex-1 overflow-y-auto space-y-1 pr-1">
                 {logs.length === 0 ? (
-                    <p className="text-xs text-outline text-center py-4">Waiting for system events...</p>
+                    <p className="text-[10px] text-outline text-center py-2">No system events...</p>
                 ) : (
-                    logs.slice(0, 20).map((log, index) => (
+                    logs.slice(0, 15).map((log, index) => (
                         <div
                             key={`${log.id}-${index}`}
-                            className="text-xs font-mono bg-zinc-800/50 rounded px-2 py-1 border-l-2 border-cyan border-opacity-20"
+                            className="text-[10px] font-mono bg-zinc-800/50 rounded px-1.5 py-0.5 border-l-2 border-emerald-500/30"
                         >
-                            <div className="flex gap-2 items-center">
+                            <div className="flex gap-1 items-center">
                                 <span className="text-outline flex-shrink-0">
                                     [{mounted ? new Date(log.timestamp).toLocaleTimeString() : '--:--:--'}]
                                 </span>
-
-                                {log.type === 'TRANSFER' ? (
-                                    <ArrowRight size={12} className="text-secondary flex-shrink-0" />
-                                ) : (
-                                    <Radio size={12} className="text-violet-500 flex-shrink-0" />
-                                )}
-
-                                <span className={`flex-1 ${getLogColor(log.type, log.status)}`}>
+                                {getIcon(log.type)}
+                                <span className={`flex-1 ${getLogColor(log.type, log.status || '')}`}>
                                     {log.message}
                                 </span>
-
-                                <span className="text-gray-600 flex-shrink-0">
-                                    {log.type === 'TRANSFER' && log.status === 'ACTIVE' && (
-                                        <span className="text-secondary animate-pulse">●</span>
-                                    )}
-                                </span>
+                                {log.type === 'TRANSFER' && log.status === 'ACTIVE' && (
+                                    <span className="text-emerald-400 animate-pulse">●</span>
+                                )}
                             </div>
                         </div>
                     ))

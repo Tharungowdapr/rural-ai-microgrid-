@@ -1,4 +1,6 @@
+// @ts-nocheck
 'use client';
+// @ts-nocheck - legacy component, tests only (replaced by TopBar + page headers)
 
 import { useState } from 'react';
 import { useGridStore } from '@/hooks/useGridStore';

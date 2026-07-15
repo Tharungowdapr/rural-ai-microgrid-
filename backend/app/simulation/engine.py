@@ -22,11 +22,26 @@ logger = logging.getLogger(__name__)
 
 # ---------- Realistic lat/lng for rural India (Madhya Pradesh / Rajasthan border area) ----------
 VILLAGE_COORDS = [
-    (23.2599, 77.4126),  # Village-A — near Bhopal
-    (23.1686, 77.5397),  # Village-B — south-east
-    (23.3375, 77.3210),  # Village-C — north-west
-    (23.2150, 77.5000),  # Village-D — central
-    (23.2900, 77.3800),  # Village-E — north
+    (23.1100, 77.5600),  # Barkheda — SE of Bhopal
+    (23.3300, 77.5900),  # Raisen — east
+    (23.1800, 77.4600),  # Mandideep — south
+    (23.3500, 77.3100),  # Obaidullaganj — NW
+    (23.4800, 77.7400),  # Sanchi — far NE
+    (23.1200, 77.7800),  # Begumganj — far SE
+    (23.4500, 77.1000),  # Narsinghgarh — far W
+    (23.0900, 77.2700),  # Rajnandgaon — SW
+    (23.0200, 77.5800),  # Biaora — south-east
+    (23.4000, 77.8300),  # Nasrullaganj — far east
+    (23.2100, 77.1500),  # Sultanpur — west
+    (23.5300, 77.4800),  # Bhaurasa — north
+    (23.2700, 77.3800),  # Pipalpani — central-west
+    (23.1500, 77.7000),  # Goharganj — east
+    (23.5200, 77.6800),  # Basoda — NE
+    (22.9500, 77.4200),  # Garhi — far south
+    (23.3900, 77.2500),  # Shahpura — NW
+    (23.4700, 77.6200),  # Udaipura — NE
+    (23.0500, 77.3500),  # Baraily — SW
+    (23.3100, 77.9200),  # Mandla — far east
 ]
 
 
@@ -128,15 +143,18 @@ class SimulationEngine:
         self.alerts: List[Alert] = []
         self.weather = Weather()
         self.simulation_speed = 1.0
-        self.simulation_time = datetime.now()
+        # Start at midday, unpaused for better solar generation during testing
+        self.simulation_time = datetime.now().replace(hour=12, minute=0, second=0, microsecond=0)
         self.total_generation = 0.0
         self.total_demand = 0.0
         self.grid_stability = 100.0
         self.active_scenarios = {}
-        self.is_paused = True
+        self.is_paused = False
         self._transfer_id = 0
         self._alert_id = 0
 
+        # Initialize weather with correct simulation time
+        self._update_weather()
         self._initialize_villages(num_villages)
 
     def _initialize_villages(self, num_villages: int):
@@ -257,7 +275,9 @@ class SimulationEngine:
 
     def _update_solar_generation(self, village: Village):
         base_irradiance = self.weather.irradiance
-        generation = (base_irradiance / 1000) * village.solarPanelCapacity
+        # Panel capacity in kW, irradiance in W/m²
+        # Typical solar panel efficiency ~20%, so effective generation:
+        generation = (base_irradiance / 1000) * village.solarPanelCapacity * 0.25
         noise = random.uniform(-5, 5)
         village.solarGeneration = max(0, generation + noise)
 

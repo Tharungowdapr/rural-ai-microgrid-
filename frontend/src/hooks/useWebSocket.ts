@@ -130,7 +130,7 @@ export const useWebSocket = () => {
                 wsRef.current.close();
             }
         };
-    }, [updateVillage, addTransfer, removeTransfer, addAlert, updateForecasts, setAIInsights, setMetrics, initializeVillages]);
+    }, [updateVillage, setTransfers, addTransfer, removeTransfer, addAlert, updateForecasts, setAIInsights, setMetrics, initializeVillages, setSimulationRunning]);
 
     const send = useCallback((message: object) => {
         if (wsRef.current?.readyState === WebSocket.OPEN) {
